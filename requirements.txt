@@ -1,18 +1,3 @@
-# Core
-streamlit==1.39.0
-pandas>=2.2.2
-numpy>=1.26.4
-sqlalchemy>=2.0.31
-psycopg2-binary>=2.9.9
-
-# Async + scheduling
-apscheduler>=3.10.4
-
-# APIs and networking
-requests>=2.32.3
-feedparser>=6.0.11
-urllib3>=2.2.2
-
 # OpenAI + AI embeddings
 openai>=1.35.13
 
@@ -21,3 +6,27 @@ unicodedata2>=15.1.0
 
 # For notebooks or debugging
 tqdm>=4.66.5
+
+# Core
+pandas>=2.1.0
+numpy>=1.26.0
+streamlit>=1.38.0
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# Visualization
+plotly>=5.24.0
+
+# PDF generation
+reportlab>=4.2.2
+
+# Networking / Utilities
+requests>=2.32.3
+urllib3>=2.2.2
+
+# Optional (used in parts of your codebase)
+openai>=1.44.0
+feedparser>=6.0.11
+apscheduler>=3.10.4
+langdetect>=1.0.9
+
