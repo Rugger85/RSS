@@ -1,0 +1,23 @@
+# Core
+streamlit==1.39.0
+pandas>=2.2.2
+numpy>=1.26.4
+sqlalchemy>=2.0.31
+psycopg2-binary>=2.9.9
+
+# Async + scheduling
+apscheduler>=3.10.4
+
+# APIs and networking
+requests>=2.32.3
+feedparser>=6.0.11
+urllib3>=2.2.2
+
+# OpenAI + AI embeddings
+openai>=1.35.13
+
+# Optional (to prevent Unicode or emoji crashes)
+unicodedata2>=15.1.0
+
+# For notebooks or debugging
+tqdm>=4.66.5
