@@ -578,6 +578,17 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     elems.append(Spacer(1, 2 * mm))
     ar = articles_df.copy()
     ar["published"] = pd.to_datetime(ar.get("published"), errors="coerce")
+    if "video_id" in ar.columns:
+        ar = ar[ar["video_id"].isna() | (ar["video_id"].astype(str).str.strip() == "")]
+    ar = ar[
+        (ar.get("title", "").astype(str).str.strip() != "") &
+        (
+            (ar.get("link", "").astype(str).str.startswith("http")) |
+            (ar.get("url",  "").astype(str).str.startswith("http")) |
+            (ar.get("source", "").astype(str).str.strip() != "") |
+            (ar.get("publisher", "").astype(str).str.strip() != "")
+        )
+    ]
     if "score" in ar.columns:
         ar["score"] = pd.to_numeric(ar["score"], errors="coerce").fillna(0.0)
         ar = ar[ar["score"] >= 0.18]
