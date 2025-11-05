@@ -788,106 +788,17 @@ else:
         st.markdown("International")
         render_title_ticker(ticker_rows_int, title="", ticker_speed=max(6, int(ticker_speed * 0.8)), row_gap=max(6, int(row_gap * 0.6)), seamless_scroll=seamless, height=100)
     with a2:
-        import re
-        import pycountry
-        import plotly.express as px
-    
-        # 1) Clean & standardize raw origins
-        origins_raw = (
-            videos.get("channel_origin", pd.Series(dtype=str))
-                  .astype(str)
-                  .str.strip()
-                  .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
-                  .dropna()
-        )
-    
-        # Keep only letters, uppercase (e.g., "U.S." -> "US", "PK " -> "PK")
-        origins = origins_raw.apply(lambda x: re.sub(r"[^A-Za-z]", "", x).upper())
-    
-        # 2) Precompute lookups
-        iso2_to_iso3 = {c.alpha_2: c.alpha_3 for c in pycountry.countries}
-        iso3_set = {c.alpha_3 for c in pycountry.countries}
-    
-        # Common newsroom-style aliases / oddities
-        ALIASES = {
-            "UK": "GBR",
-            "UAE": "ARE",
-            "KSA": "SAU",
-            "USA": "USA",
-            "RUSSIA": "RUS",
-            "SOUTHKOREA": "KOR",
-            "NORTHKOREA": "PRK",
-            "VIETNAM": "VNM",
-            "BOLIVIA": "BOL",
-            "VENEZUELA": "VEN",
-            "LAOS": "LAO",
-            "SYRIA": "SYR",
-            "IRAN": "IRN",
-            "PALESTINE": "PSE",
-            "TURKIYE": "TUR",  # sometimes appears like this
-        }
-    
-        def to_iso3(x: str) -> str | None:
-            if not x:
-                return None
-            # Alias bucket first
-            if x in ALIASES:
-                return ALIASES[x]
-            # Already ISO-3
-            if len(x) == 3 and x in iso3_set:
-                return x
-            # ISO-2 -> ISO-3
-            if len(x) == 2 and x in iso2_to_iso3:
-                return iso2_to_iso3[x]
-            # Full country name attempts (after cleaning removed spaces; try with spaces too)
-            try:
-                # Try direct lookup on the original (less-cleaned) value to keep spaces
-                c = pycountry.countries.lookup(x)
-                return c.alpha_3
-            except Exception:
-                # Last resort: try to reinsert likely spaces for known patterns
-                return None
-    
-        iso3 = origins.map(to_iso3)
-    
-        # 3) Optional: show what failed to convert (debug)
-        missing_codes = origins[iso3.isna()].value_counts().head(20)
-        if len(missing_codes) > 0:
-            st.caption("⚠️ Unrecognized/unclean origin values (top 20):")
-            st.dataframe(missing_codes.rename("Count").to_frame())
-    
-        # 4) Build counts for the map
-        country_counts = (
-            iso3.dropna()
-                .value_counts()
-                .rename_axis("iso3")
-                .reset_index(name="Videos")
-        )
-    
+        country_counts = (videos["channel_origin"].astype(str).str.strip().replace({"": pd.NA, "nan": pd.NA}).dropna().value_counts().rename_axis("Country").reset_index(name="Videos"))
         if not country_counts.empty:
-            fig = px.choropleth(
-                country_counts,
-                locations="iso3",
-                locationmode="ISO-3",
-                color="Videos",
-                color_continuous_scale="Blues",
-                scope="world",
-            )
+            fig = px.choropleth(country_counts, locations="Country", locationmode="country names", color="Videos", color_continuous_scale="Blues")
             fig.update_geos(fitbounds="locations", visible=False)
-            fig.update_layout(
-                margin=dict(l=0, r=0, t=0, b=0),
-                paper_bgcolor="#ffffff",
-                plot_bgcolor="#ffffff",
-                font_color=THEME["ink"],
-                coloraxis_showscale=False,
-                height=420
-            )
+            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", font_color=THEME["ink"], coloraxis_showscale=False, height=420)
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         else:
             st.markdown(f"""
-    <div style="background:{THEME['card']};border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 16px;box-shadow:0 3px 10px rgba(2,6,23,.18);color:{THEME['muted']};font-weight:700;">
-      Channel Origins Map — No countries found
-    </div>
-    """, unsafe_allow_html=True)
+<div style="background:{THEME['card']};border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 16px;box-shadow:0 3px 10px rgba(2,6,23,.18);color:{THEME['muted']};font-weight:700;">
+  Channel Origins Map — No countries found
+</div>
+""", unsafe_allow_html=True)
 
 
