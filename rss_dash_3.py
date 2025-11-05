@@ -9,6 +9,12 @@ from reportlab.lib.units import mm
 from reportlab.platypus import BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer, Table, TableStyle, NextPageTemplate, PageBreak, Image
 from reportlab.lib.utils import ImageReader
 import plotly.express as px
+from io import BytesIO
+try:
+    from pypdf import PdfReader, PdfWriter
+except Exception:
+    from PyPDF2 import PdfReader, PdfWriter
+
 
 st.set_page_config(page_title="Foreign Media Monitoring - DEMP", page_icon="https://raw.githubusercontent.com/Rugger85/DEMP-FR/main/logo.jpeg", layout="wide")
 socket.setdefaulttimeout(12.0)
@@ -412,6 +418,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
             n = int(float(v)); return f"{n:,}"
         except Exception:
             return str(v or "0")
+
     buf = io.BytesIO()
     lm = rm = 18 * mm
     tm = bm = 16 * mm
@@ -419,7 +426,9 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     frame_portrait = Frame(lm, bm, A4[0]-lm-rm, A4[1]-tm-bm, id="portrait")
     L = landscape(A4)
     frame_land = Frame(lm, bm, L[0]-lm-rm, L[1]-tm-bm, id="landscape")
+
     bg_path = "https://raw.githubusercontent.com/Rugger85/DEMP-FR/main/final_Design_layout_final-01-01.png"
+
     def _on_portrait(canvas, doc_obj):
         canvas.setPageSize(A4)
         try:
@@ -427,20 +436,32 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
             canvas.drawImage(bg, 0, 0, width=A4[0], height=A4[1])
         except Exception:
             pass
+
     def _on_land(canvas, doc_obj):
         canvas.setPageSize(L)
-    doc.addPageTemplates([PageTemplate(id="Portrait", frames=[frame_portrait], onPage=_on_portrait),PageTemplate(id="Landscape", frames=[frame_land], onPage=_on_land)])
+
+    doc.addPageTemplates([
+        PageTemplate(id="Portrait", frames=[frame_portrait], onPage=_on_portrait),
+        PageTemplate(id="Landscape", frames=[frame_land], onPage=_on_land)
+    ])
+
     styles = getSampleStyleSheet()
     h_title = ParagraphStyle("h_title", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=22, alignment=1, textColor=colors.HexColor("#01647b"), spaceAfter=10)
     h_topic = ParagraphStyle("h_topic", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=14, textColor=colors.HexColor("#01647b"), spaceAfter=6)
     label = ParagraphStyle("label", parent=styles["Normal"], fontName="Helvetica", fontSize=10.5, textColor=colors.HexColor("#3b4350"), leading=14)
     section = ParagraphStyle("section", parent=styles["Heading3"], fontName="Helvetica-Bold", fontSize=12, textColor=colors.HexColor("#01647b"), spaceAfter=4, spaceBefore=6)
     tag_style = ParagraphStyle("tags", parent=styles["Normal"], fontName="Helvetica", fontSize=10.5, textColor=colors.HexColor("#3b4350"), leading=14)
+    table_title = ParagraphStyle("table_title", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=14, textColor=colors.black, spaceAfter=6)
+    cell = ParagraphStyle("cell", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=12, textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
+    header_style = ParagraphStyle("hdr", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=9, textColor=colors.white)
+
     elems = []
+    # --- Cover (Portrait)
     elems.append(Spacer(1, 30 * mm))
     elems.append(Paragraph("Central Monitoring Unit – Digital Media Report", h_title))
     elems.append(Spacer(1, 6 * mm))
     elems.append(Paragraph(f"Topic: {html.escape(topic)}", h_topic))
+
     created = header_row.get("created_at", "")
     try:
         created_str = created.strftime("%Y-%m-%d %H:%M")
@@ -456,8 +477,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     ti = _demp_percent(stats_dict or {})
 
     elems.append(Paragraph(
-        f"Channels: {ch} • Days: {dy} • Views: {vw} • Likes: {lk} • Comments: {cm} • "
-        f"<b>Traction Index: {ti}</b>", 
+        f"Channels: {ch} • Days: {dy} • Views: {vw} • Likes: {lk} • Comments: {cm} • <b>Traction Index: {ti}</b>",
         label
     ))
     elems.append(Spacer(1, 5 * mm))
@@ -465,6 +485,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     ai_insights = html.escape(header_row.get("ai_insights", "") or "")
     summary = html.escape(header_row.get("ai_summary", "") or "")
     hashtags = html.escape(header_row.get("ai_hashtags", "") or "")
+
     elems.append(Paragraph("AI Insights", section))
     elems.append(Paragraph(ai_insights, label))
     elems.append(Spacer(1, 4 * mm))
@@ -474,27 +495,27 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     if hashtags:
         elems.append(Paragraph("Hashtags", section))
         elems.append(Paragraph(hashtags, tag_style))
+
     elems.append(NextPageTemplate("Landscape"))
     elems.append(PageBreak())
-    table_title = ParagraphStyle("table_title", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=14, textColor=colors.black, spaceAfter=6)
-    elems.append(Paragraph("Relevant Videos", table_title))
-    elems.append(Spacer(1, 2 * mm))
-    avail_w = L[0] - lm - rm
-    ratios = [0.09, 0.07, 0.24, 0.16, 0.07, 0.06, 0.07, 0.12, 0.12]
-    col_widths = [r * avail_w for r in ratios]
-    cell = ParagraphStyle("cell", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=12, textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
-    header_style = ParagraphStyle("hdr", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=9, textColor=colors.white)
-    rows = [[Paragraph("Thumb", header_style), Paragraph("Logo", header_style), Paragraph("Title", header_style),Paragraph("Channel", header_style), Paragraph("Views", header_style), Paragraph("Likes", header_style),Paragraph("Comments", header_style), Paragraph("Published", header_style), Paragraph("URL", header_style)]]
-    _PLACEHOLDER_PNG_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAYAAABZxZ2mAAAACXBIWXMAAAsSAAALEgHS3X78AAABcElEQVR4nO3aMU7DQBQF4S8"
+
+    # =========================
+    # Helpers for images (reused)
+    # =========================
+    _PLACEHOLDER_PNG_B64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAYAAABZxZ2mAAAACXBIWXMAAAsSAAALEgHS3X78AAABcElEQVR4nO3aMU7DQBQF4S8"
         "n3Z2lq8l7h7gQyqG1w1t6o3V5y1g0o0s7gY8w0S8yQ3e/0Qq+f3g0G7V8g6h9C4a+qf8F4h2JbCwAAAAAAAAAAAAAA8D9c7R3v1z3x"
         "mRrQeD0q4m8l7bqD3hYV0mJ9G5x1k8s2w3uK2pQy2e6sQ2v8cK4dZr7fKcG9fW2nq6dDkFqS5f2y0W3e5H5nq1m9bq8cJQ0nJ9h0Z/"
-        "8n2Jw7ZkZ0b7l3bq6cKk2k8b6u8dJY3r7b0q+qJgQ3j0YHn8pQKAAAAAAAAAAAAAAB8H7S1Q6eFme1AAAAAElFTkSuQmCC")
+        "8n2Jw7ZkZ0b7l3bq6cKk2k8b6u8dJY3r7b0q+qJgQ3j0YHn8pQKAAAAAAAAAAAAAAB8H7S1Q6eFme1AAAAAElFTkSuQmCC"
+    )
+
     def _placeholder_img(max_w, max_h):
         raw = base64.b64decode(_PLACEHOLDER_PNG_B64)
         bio = io.BytesIO(raw)
         img = Image(bio)
         img._restrictSize(max_w, max_h)
         return img
+
     def _img_from_any(src, max_w, max_h):
         try:
             if not src:
@@ -515,6 +536,11 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         except Exception:
             pass
         return _placeholder_img(max_w, max_h)
+
+    def _favicon_for_url(u, max_w, max_h):
+        g = _favicon_from_any_url(u, 64)
+        return _img_from_any(g, max_w, max_h)
+
     def _logo_from_channel(channel_thumb, channel_url, max_w, max_h):
         if isinstance(channel_thumb, str) and channel_thumb.strip():
             img = _img_from_any(channel_thumb, max_w, max_h)
@@ -536,35 +562,93 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
             pass
         fav = _favicon_from_any_url(channel_url, 64)
         return _img_from_any(fav, max_w, max_h)
-    def _favicon_for_url(u, max_w, max_h):
-        g = _favicon_from_any_url(u, 64)
-        return _img_from_any(g, max_w, max_h)
-    thumb_box_w, thumb_box_h = col_widths[0], 28
-    logo_box_w, logo_box_h = col_widths[1], 24
+
+    # =========================
+    # Videos table (Landscape)
+    # =========================
+    elems.append(Paragraph("Relevant Videos", table_title))
+    elems.append(Spacer(1, 2 * mm))
+
+    avail_w = L[0] - lm - rm
+    ratios = [0.09, 0.07, 0.24, 0.16, 0.07, 0.06, 0.07, 0.12, 0.12]
+    col_widths = [r * avail_w for r in ratios]
+
+    rows = [[
+        Paragraph("Thumb", header_style),
+        Paragraph("Logo", header_style),
+        Paragraph("Title", header_style),
+        Paragraph("Channel", header_style),
+        Paragraph("Views", header_style),
+        Paragraph("Likes", header_style),
+        Paragraph("Comments", header_style),
+        Paragraph("Published", header_style),
+        Paragraph("URL", header_style)
+    ]]
+
     vids = videos_df.copy()
     vids["published_at"] = pd.to_datetime(vids.get("published_at"), errors="coerce")
+    thumb_box_w, thumb_box_h = col_widths[0], 28
+    logo_box_w, logo_box_h = col_widths[1], 24
+
     for r in vids.to_dict("records"):
         thumb_src = r.get("thumbnail")
         logo_src_thumb = r.get("channel_thumb")
         logo_src_url = r.get("channel_url")
         thumb = _img_from_any(thumb_src, thumb_box_w, thumb_box_h)
         logo = _logo_from_channel(logo_src_thumb, logo_src_url, logo_box_w, logo_box_h)
-        rows.append([thumb, logo, Paragraph(html.escape(str(r.get("title", "") or "")), cell), Paragraph(html.escape(str(r.get("channel_title", "") or "")), cell), _comma(r.get("view_count")), _comma(r.get("like_count")), _comma(r.get("comment_count")), (r["published_at"].strftime("%Y-%m-%d %H:%M") if pd.notna(r["published_at"]) else ""), Paragraph(html.escape(str(r.get("url", "") or "")), cell)])
+        rows.append([
+            thumb,
+            logo,
+            Paragraph(html.escape(str(r.get("title", "") or "")), cell),
+            Paragraph(html.escape(str(r.get("channel_title", "") or "")), cell),
+            _comma(r.get("view_count")),
+            _comma(r.get("like_count")),
+            _comma(r.get("comment_count")),
+            (r["published_at"].strftime("%Y-%m-%d %H:%M") if pd.notna(r["published_at"]) else ""),
+            Paragraph(html.escape(str(r.get("url", "") or "")), cell)
+        ])
+
     tbl = Table(rows, colWidths=col_widths, repeatRows=1)
-    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTSIZE",(0,0),(-1,-1),8),("ALIGN",(4,1),(6,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTSIZE",(0,0),(-1,-1),8),
+        ("ALIGN",(4,1),(6,-1),"CENTER"),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),
+        ("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),
+        ("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
+        ("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
+        ("LEFTPADDING",(0,0),(-1,-1),5),
+        ("RIGHTPADDING",(0,0),(-1,-1),5),
+        ("TOPPADDING",(0,0),(-1,-1),4),
+        ("BOTTOMPADDING",(0,0),(-1,-1),4),
+    ]))
     elems.append(tbl)
+
+    # =========================
+    # Articles table (Landscape)
+    # =========================
     elems.append(Spacer(1, 6 * mm))
     elems.append(Paragraph("Relevant Articles", table_title))
     elems.append(Spacer(1, 2 * mm))
+
     ar = articles_df.copy()
-    st.dataframe(ar)
     ar["published"] = pd.to_datetime(ar.get("published"), errors="coerce")
+
     a_avail_w = L[0] - lm - rm
     a_ratios = [0.06, 0.12, 0.48, 0.14, 0.20]
     a_col_w = [r * a_avail_w for r in a_ratios]
     a_cell = ParagraphStyle("a_cell", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=12, textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
-    a_header = [Paragraph("Icon", header_style), Paragraph("Source", header_style), Paragraph("Title", header_style), Paragraph("Published", header_style), Paragraph("URL", header_style)]
-    a_rows = [a_header]
+
+    a_rows = [[
+        Paragraph("Icon", header_style),
+        Paragraph("Source", header_style),
+        Paragraph("Title", header_style),
+        Paragraph("Published", header_style),
+        Paragraph("URL", header_style),
+    ]]
+
     a_icon_w, a_icon_h = a_col_w[0], 18
     for r in ar.to_dict("records"):
         link = r.get("link") or r.get("url") or ""
@@ -573,13 +657,139 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         pub = r.get("published")
         pub_s = pub.strftime("%Y-%m-%d %H:%M") if isinstance(pub, pd.Timestamp) and not pd.isna(pub) else (str(pub) if pub else "")
         icon = _favicon_for_url(link, a_icon_w, a_icon_h)
-        a_rows.append([icon, Paragraph(html.escape(str(src)), a_cell), Paragraph(html.escape(str(ttl)), a_cell), Paragraph(html.escape(pub_s), a_cell), Paragraph(html.escape(str(link)), a_cell)])
+        a_rows.append([
+            icon,
+            Paragraph(html.escape(str(src)), a_cell),
+            Paragraph(html.escape(str(ttl)), a_cell),
+            Paragraph(html.escape(pub_s), a_cell),
+            Paragraph(html.escape(str(link)), a_cell),
+        ])
+
     a_tbl = Table(a_rows, colWidths=a_col_w, repeatRows=1)
-    a_tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTSIZE",(0,0),(-1,-1),8),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+    a_tbl.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTSIZE",(0,0),(-1,-1),8),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),
+        ("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),
+        ("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
+        ("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
+        ("LEFTPADDING",(0,0),(-1,-1),5),
+        ("RIGHTPADDING",(0,0),(-1,-1),5),
+        ("TOPPADDING",(0,0),(-1,-1),4),
+        ("BOTTOMPADDING",(0,0),(-1,-1),4),
+    ]))
     elems.append(a_tbl)
+
+    # =========================
+    # Channel details (Landscape) — NEW
+    # =========================
+    elems.append(Spacer(1, 8 * mm))
+    elems.append(Paragraph("Channel Details (Videos in this Report)", table_title))
+    elems.append(Spacer(1, 2 * mm))
+
+    ch_df = vids.copy()  # vids already has published_at parsed
+    # Choose grouping key: prefer channel_id, else channel_url, else channel_title
+    if "channel_id" in ch_df.columns and ch_df["channel_id"].notna().any():
+        group_key = "channel_id"
+    elif "channel_url" in ch_df.columns and ch_df["channel_url"].notna().any():
+        group_key = "channel_url"
+    else:
+        group_key = "channel_title"
+
+    # Safe numeric coercion helpers
+    to_num = lambda s: pd.to_numeric(s, errors="coerce").fillna(0)
+
+    # Aggregate channel-level details
+    # created_on: use channel_created_at if present; else earliest published_at from the report’s videos
+    has_created = "channel_created_at" in ch_df.columns
+    agg_dict = {
+        "channel_title": ("channel_title", lambda s: (s.dropna().iloc[0] if not s.dropna().empty else "")),
+        "channel_url": ("channel_url", lambda s: (s.dropna().iloc[0] if not s.dropna().empty else "")),
+        "channel_thumb": ("channel_thumb", lambda s: (s.dropna().iloc[0] if not s.dropna().empty else "")),
+        "channel_origin": ("channel_origin", lambda s: (s.dropna().iloc[0] if not s.dropna().empty else "")),
+        "channel_subscribers": ("channel_subscribers", lambda s: int(to_num(s).max())),
+        "channel_total_views": ("channel_total_views", lambda s: int(to_num(s).max())),
+        "videos_in_report": ("video_id", lambda s: s.dropna().nunique()),
+    }
+    if has_created:
+        agg_dict["channel_created_at"] = ("channel_created_at", lambda s: pd.to_datetime(s, errors="coerce").dropna().min())
+    else:
+        agg_dict["created_from_videos"] = ("published_at", lambda s: pd.to_datetime(s, errors="coerce").dropna().min())
+
+    ch_agg = ch_df.groupby(group_key, dropna=False).agg(**agg_dict).reset_index(drop=False)
+
+    # Normalize a final created_on column
+    if has_created:
+        ch_agg["created_on"] = ch_agg["channel_created_at"]
+    else:
+        ch_agg["created_on"] = ch_agg["created_from_videos"]
+    ch_agg["created_on"] = pd.to_datetime(ch_agg["created_on"], errors="coerce")
+
+    # Build table
+    c_avail_w = L[0] - lm - rm
+    # Logo | Channel | Country | Subscribers | Channel Views | Videos in Report | Created On | URL
+    c_ratios  = [0.08, 0.22, 0.12, 0.14, 0.14, 0.12, 0.09, 0.09]
+    c_widths  = [r * c_avail_w for r in c_ratios]
+    c_rows = [[
+        Paragraph("Logo", header_style),
+        Paragraph("Channel", header_style),
+        Paragraph("Country", header_style),
+        Paragraph("Subscribers", header_style),
+        Paragraph("Channel Views", header_style),
+        Paragraph("Videos in Report", header_style),
+        Paragraph("Created On", header_style),
+        Paragraph("URL", header_style),
+    ]]
+
+    c_logo_w, c_logo_h = c_widths[0], 22
+
+    for r in ch_agg.to_dict("records"):
+        logo = _logo_from_channel(r.get("channel_thumb",""), r.get("channel_url",""), c_logo_w, c_logo_h)
+        title = r.get("channel_title","") or ""
+        country = r.get("channel_origin","") or ""
+        subs = _comma(r.get("channel_subscribers"))
+        ch_views = _comma(r.get("channel_total_views"))
+        vids_in = int(r.get("videos_in_report") or 0)
+        created_on = r.get("created_on")
+        created_str = created_on.strftime("%Y-%m-%d") if isinstance(created_on, pd.Timestamp) and not pd.isna(created_on) else ""
+        url = r.get("channel_url","") or ""
+
+        c_rows.append([
+            logo,
+            Paragraph(html.escape(str(title)), cell),
+            Paragraph(html.escape(str(country)), cell),
+            Paragraph(subs, cell),
+            Paragraph(ch_views, cell),
+            Paragraph(str(vids_in), cell),
+            Paragraph(html.escape(created_str), cell),
+            Paragraph(html.escape(url), cell),
+        ])
+
+    c_tbl = Table(c_rows, colWidths=c_widths, repeatRows=1)
+    c_tbl.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTSIZE",(0,0),(-1,-1),8),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),
+        ("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),
+        ("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
+        ("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
+        ("LEFTPADDING",(0,0),(-1,-1),5),
+        ("RIGHTPADDING",(0,0),(-1,-1),5),
+        ("TOPPADDING",(0,0),(-1,-1),4),
+        ("BOTTOMPADDING",(0,0),(-1,-1),4),
+    ]))
+    elems.append(c_tbl)
+
+    # Build & return
     doc.build(elems)
     buf.seek(0)
     return buf.getvalue()
+
+
 
 def render_detail_page(topic: str):
     st.markdown("<a href='?' style='text-decoration:none'>&larr; Back to dashboard</a>", unsafe_allow_html=True)
@@ -593,17 +803,29 @@ def render_detail_page(topic: str):
     st.markdown(report_card_html_pro({"topic": topic, **header}, 1, logos, stats, is_local), unsafe_allow_html=True)
     show_v = total_df_final[total_df_final["topic"].apply(lambda x: _norm_topic_val(str(x)) == norm)].copy()
     if not show_v.empty:
+        # English-only by title
         show_v["__is_english__"] = show_v["title"].apply(is_english_title)
         show_v = show_v[show_v["__is_english__"] == True]
+
+        # Local vs International ONLY by Pakistan keyword — NO allow-list filtering here
         if is_local:
-            show_v = show_v[show_v["title"].str.contains(r"\bpakistan\b", case=False, na=False) | show_v["title"].str.contains("پاکستان", case=False, na=False)]
+            show_v = show_v[
+                show_v["title"].str.contains(r"\bpakistan\b", case=False, na=False) |
+                show_v["title"].str.contains("پاکستان", case=False, na=False)
+            ]
         else:
-            #show_v["channel_url_norm"] = _norm_url(show_v.get("channel_url", ""))
-            #allow_set = set(allow["channel_url_norm"].tolist())
-            #show_v = show_v[show_v["channel_url_norm"].isin(allow_set)]
+            # No allow-list filtering, no channel_url_norm usage here
+            pass
+
+        # Sort + de-dupe
         show_v["published_at"] = pd.to_datetime(show_v["published_at"], errors="coerce")
         show_v["__title_key__"] = show_v["title"].apply(normalize_text)
-        show_v = (show_v.sort_values(["published_at", "video_id"], ascending=[False, True]).drop_duplicates(subset=["__title_key__", "published_at"], keep="first").drop(columns=["__title_key__", "__is_english__", "channel_url_norm"], errors="ignore"))
+        show_v = (
+            show_v.sort_values(["published_at", "video_id"], ascending=[False, True])
+                  .drop_duplicates(subset=["__title_key__", "published_at"], keep="first")
+                  .drop(columns=["__title_key__", "__is_english__", "channel_url_norm"], errors="ignore")
+        )
+
     st.markdown("### Videos")
     if show_v.empty:
         st.info("No videos match the filters for this topic.")
@@ -679,6 +901,140 @@ else:
         ticker_speed = st.slider("Ticker speed (seconds per screen)", 10, 120, 80, 1)
         row_gap = st.slider("Card gap (px)", 8, 48, 12, 1)
         seamless = st.checkbox("Seamless scroll (duplicate content)", value=True)
+        #+++++++++++++++#
+        # ================================
+        # 📎 Multi-topic PDF Merge Helpers
+        # ================================
+
+        from io import BytesIO
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except Exception:
+            from PyPDF2 import PdfReader, PdfWriter
+
+
+        def _topic_materials(topic: str):
+            """Fetch AI results, stats, videos, and articles for a given topic using same logic as render_detail_page()."""
+            norm = _norm_topic_val(topic)
+            is_local = ("pakistan" in norm) or ("پاکستان" in topic)
+
+            # --- AI results row (latest)
+            rep_row = (
+                results[results["topic"].apply(lambda x: _norm_topic_val(str(x)) == norm)]
+                .sort_values("created_at", ascending=False)
+                .head(1)
+                .to_dict("records")
+            )
+            header = rep_row[0] if rep_row else {
+                "topic": topic, "ai_insights": "", "ai_summary": "", "ai_hashtags": "", "created_at": ""
+            }
+
+            stats = stats_map_all.get(norm, {})
+
+            # --- Videos
+            show_v = total_df_final[total_df_final["topic"].apply(lambda x: _norm_topic_val(str(x)) == norm)].copy()
+            if not show_v.empty:
+                show_v["__is_english__"] = show_v["title"].apply(is_english_title)
+                show_v = show_v[show_v["__is_english__"] == True]
+
+                if is_local:
+                    show_v = show_v[
+                        show_v["title"].str.contains(r"\bpakistan\b", case=False, na=False) |
+                        show_v["title"].str.contains("پاکستان", case=False, na=False)
+                    ]
+
+                show_v["published_at"] = pd.to_datetime(show_v["published_at"], errors="coerce")
+                show_v["__title_key__"] = show_v["title"].apply(normalize_text)
+                show_v = (
+                    show_v.sort_values(["published_at", "video_id"], ascending=[False, True])
+                        .drop_duplicates(subset=["__title_key__", "published_at"], keep="first")
+                        .drop(columns=["__title_key__", "__is_english__", "channel_url_norm"], errors="ignore")
+                )
+
+            # --- Articles
+            topic_articles = topics_df[topics_df["topic"].apply(lambda x: _norm_topic_val(str(x)) == norm)].copy()
+            if not topic_articles.empty:
+                topic_articles["published"] = pd.to_datetime(topic_articles["published"], errors="coerce")
+                topic_articles["__en__"] = topic_articles["title"].fillna("").apply(is_english_title)
+                topic_articles = topic_articles[topic_articles["__en__"] == True]
+                if is_local:
+                    topic_articles = topic_articles[
+                        topic_articles["title"].astype(str).str.contains(r"\bpakistan\b", case=False, na=False) |
+                        topic_articles["title"].astype(str).str.contains("پاکستان", case=False, na=False)
+                    ]
+                else:
+                    topic_articles = topic_articles[
+                        ~(
+                            topic_articles["title"].astype(str).str.contains(r"\bpakistan\b", case=False, na=False) |
+                            topic_articles["title"].astype(str).str.contains("پاکستان", case=False, na=False)
+                        )
+                    ]
+                topic_articles = topic_articles.sort_values("published", ascending=False)\
+                                            .drop_duplicates(subset=["title", "published"], keep="first")
+
+            vids_df = show_v if not show_v.empty else pd.DataFrame(
+                columns=["title","channel_title","view_count","like_count","comment_count","published_at","url","thumbnail","channel_url","channel_thumb"]
+            )
+            arts_df = topic_articles if not topic_articles.empty else pd.DataFrame(
+                columns=["title","source","summary","link","published"]
+            )
+
+            return header, stats, vids_df, arts_df
+
+
+        def build_single_topic_pdf_bytes(topic: str) -> bytes:
+            """Build a PDF for one topic using existing _pdf_build()."""
+            header, stats, vids_df, arts_df = _topic_materials(topic)
+            return _pdf_build(topic, header, stats, vids_df, arts_df)
+
+
+        def merge_pdfs(pdf_bytes_list: list[bytes]) -> bytes:
+            """Merge multiple PDF byte blobs into one combined PDF."""
+            writer = PdfWriter()
+            for blob in pdf_bytes_list:
+                reader = PdfReader(BytesIO(blob))
+                for page in reader.pages:
+                    writer.add_page(page)
+            out = BytesIO()
+            writer.write(out)
+            out.seek(0)
+            return out.read()
+
+
+        # ================================
+        # 📎 Streamlit UI: Combine Topics
+        # ================================
+
+        st.divider()
+        st.subheader("📎 Combine multiple topics into one PDF")
+
+        _all_topics = (
+            results.dropna(subset=["topic"])
+                .assign(t=lambda d: d["topic"].apply(_norm_topic_val))
+                .sort_values("created_at", ascending=False)
+                .drop_duplicates(subset=["t"], keep="first")["topic"]
+                .tolist()
+        )
+
+        picked_topics = st.multiselect("Select two or more topics to include", options=_all_topics, help="Each topic will retain its own first-page design and AI summary.")
+        if st.button("⬇️ Generate Combined PDF"):
+
+            if not picked_topics:
+                st.warning("Please select at least one topic.")
+            else:
+                blobs = []
+                for t in picked_topics:
+                    try:
+                        st.write(f"Generating report for **{t}** ...")
+                        blobs.append(build_single_topic_pdf_bytes(t))
+                    except Exception as e:
+                        st.error(f"Error building PDF for '{t}': {e}")
+                if blobs:
+                    merged = merge_pdfs(blobs)
+                    fname = "combined_" + "_".join(_norm_topic_val(t)[:20] for t in picked_topics)[:80] + ".pdf"
+                    st.download_button("📥 Download Combined Report", data=merged, file_name=fname, mime="application/pdf", key="dl_combined_pdf")
+                else:
+                    st.info("No reports could be generated.")
         st.caption("Local ticker uses title+description filter containing 'Pakistan'. International ticker uses allow-list & non-Pakistan origin for videos; articles exclude Pakistan keywords.")
         st.divider()
         st.subheader("Allow-list updater")
@@ -788,66 +1144,48 @@ else:
         st.markdown("International")
         render_title_ticker(ticker_rows_int, title="", ticker_speed=max(6, int(ticker_speed * 0.8)), row_gap=max(6, int(row_gap * 0.6)), seamless_scroll=seamless, height=100)
     with a2:
-        import re
-        import pycountry
         import plotly.express as px
-        origins_raw = (
+
+        # Clean ISO-2 codes
+        origins = (
             videos.get("channel_origin", pd.Series(dtype=str))
-                  .astype(str)
-                  .str.strip()
-                  .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
-                  .dropna()
+                .astype(str).str.strip().str.upper()
+                .replace({"": pd.NA, "NAN": pd.NA})
+                .dropna()
         )
-        origins = origins_raw.apply(lambda x: re.sub(r"[^A-Za-z]", "", x).upper())
-        iso2_to_iso3 = {c.alpha_2: c.alpha_3 for c in pycountry.countries}
-        iso3_set = {c.alpha_3 for c in pycountry.countries}
-        ALIASES = {
-            "UK": "GBR",
-            "UAE": "ARE",
-            "KSA": "SAU",
-            "USA": "USA",
-            "RUSSIA": "RUS",
-            "SOUTHKOREA": "KOR",
-            "NORTHKOREA": "PRK",
-            "VIETNAM": "VNM",
-            "BOLIVIA": "BOL",
-            "VENEZUELA": "VEN",
-            "LAOS": "LAO",
-            "SYRIA": "SYR",
-            "IRAN": "IRN",
-            "PALESTINE": "PSE",
-            "TURKIYE": "TUR",  # sometimes appears like this
+
+        # Explicit ISO-2 -> ISO-3 for every code you listed
+        ISO2_TO_ISO3 = {
+            "US":"USA","GB":"GBR","IN":"IND","PK":"PAK","AU":"AUS","UA":"UKR","TW":"TWN","KR":"KOR",
+            "ZA":"ZAF","SG":"SGP","PE":"PER","AE":"ARE","NG":"NGA","TH":"THA","HK":"HKG","FR":"FRA",
+            "BD":"BGD","NL":"NLD","BR":"BRA","DE":"DEU","CH":"CHE","VN":"VNM","JP":"JPN","PL":"POL",
+            "TR":"TUR","CA":"CAN","QA":"QAT","JO":"JOR","CL":"CHL","NZ":"NZL","IT":"ITA","IE":"IRL",
+            "PT":"PRT","IL":"ISR","SA":"SAU","EG":"EGY","RO":"ROU","MY":"MYS","PH":"PHL","DZ":"DZA",
+            "ES":"ESP","BE":"BEL","ID":"IDN","LV":"LVA","AT":"AUT","MX":"MEX","UZ":"UZB","NO":"NOR",
+            "DK":"DNK","AR":"ARG","CO":"COL","SE":"SWE","MA":"MAR","KH":"KHM","KZ":"KAZ"
         }
-        def to_iso3(x: str) -> str | None:
-            if not x:
-                return None
-            if x in ALIASES:
-                return ALIASES[x]
-            if len(x) == 3 and x in iso3_set:
-                return x
-            if len(x) == 2 and x in iso2_to_iso3:
-                return iso2_to_iso3[x]
-            try:
-                c = pycountry.countries.lookup(x)
-                return c.alpha_3
-            except Exception:
-                return None
-        iso3 = origins.map(to_iso3)
-        missing_codes = origins[iso3.isna()].value_counts().head(20)
-        if len(missing_codes) > 0:
-            st.caption("⚠️ Unrecognized/unclean origin values (top 20):")
-            st.dataframe(missing_codes.rename("Count").to_frame())
+
+        iso3 = origins.map(ISO2_TO_ISO3)
+
+        # Quick debug aids (optional)
+        unmapped = origins[iso3.isna()].unique().tolist()
+        #st.caption(f"🌍 Countries in data: {origins.nunique()} | Mapped to ISO-3: {iso3.dropna().nunique()}")
+        #if unmapped:
+            #st.caption(f"⚠️ Unmapped codes: {', '.join(unmapped)}")
+
+        # Counts for the map
         country_counts = (
             iso3.dropna()
                 .value_counts()
                 .rename_axis("iso3")
                 .reset_index(name="Videos")
         )
+
         if not country_counts.empty:
             fig = px.choropleth(
                 country_counts,
                 locations="iso3",
-                locationmode="ISO-3",
+                locationmode="ISO-3",   # 👈 key: we’re feeding ISO-3
                 color="Videos",
                 color_continuous_scale="Blues",
                 scope="world",
@@ -865,8 +1203,20 @@ else:
         else:
             st.markdown(f"""
     <div style="background:{THEME['card']};border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 16px;box-shadow:0 3px 10px rgba(2,6,23,.18);color:{THEME['muted']};font-weight:700;">
-      Channel Origins Map — No countries found
+    Channel Origins Map — No countries found
     </div>
     """, unsafe_allow_html=True)
-
-
+    st.markdown("## AI Reports")
+    if results.empty:
+        st.info("No reports available.")
+    else:
+        latest_per_topic = results.sort_values("created_at", ascending=False).dropna(subset=["topic"]).drop_duplicates(subset=["topic"], keep="first")
+        i = 1
+        for r in latest_per_topic.to_dict("records"):
+            t = r.get("topic", "")
+            is_local = is_pk_topic(t)
+            norm = _norm_topic_val(t)
+            logos = logos_map_all.get(norm, [])
+            stats = stats_map_all.get(norm, {})
+            st.markdown(report_card_html_pro(r, i, logos, stats, is_local), unsafe_allow_html=True)
+            i += 1
