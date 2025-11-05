@@ -342,7 +342,7 @@ videos_local["topic"] = videos_local.get("topic")
 videos_int = videos.copy()
 videos_int["channel_url_norm"] = _norm_url(videos_int.get("channel_url", ""))
 allow["channel_url_norm"] = _norm_url(allow.get("channel_url", ""))
-#videos_int = videos_int[videos_int["channel_url_norm"].isin(allow["channel_url_norm"])]
+videos_int = videos_int[videos_int["channel_url_norm"].isin(allow["channel_url_norm"])]
 if "channel_origin" in videos_int.columns:
     videos_int = videos_int[videos_int["channel_origin"] != "Pakistan"]
 
@@ -429,10 +429,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
             pass
     def _on_land(canvas, doc_obj):
         canvas.setPageSize(L)
-    doc.addPageTemplates([
-        PageTemplate(id="Portrait", frames=[frame_portrait], onPage=_on_portrait),
-        PageTemplate(id="Landscape", frames=[frame_land], onPage=_on_land)
-    ])
+    doc.addPageTemplates([PageTemplate(id="Portrait", frames=[frame_portrait], onPage=_on_portrait),PageTemplate(id="Landscape", frames=[frame_land], onPage=_on_land)])
     styles = getSampleStyleSheet()
     h_title = ParagraphStyle("h_title", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=22, alignment=1, textColor=colors.HexColor("#01647b"), spaceAfter=10)
     h_topic = ParagraphStyle("h_topic", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=14, textColor=colors.HexColor("#01647b"), spaceAfter=6)
@@ -450,14 +447,21 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     except Exception:
         created_str = str(created or "")
     elems.append(Paragraph(f"Date: {created_str}", label))
+
     ch = _comma((stats_dict or {}).get("channels", 0))
     dy = _comma((stats_dict or {}).get("days", 0))
     vw = _comma((stats_dict or {}).get("views", 0))
     lk = _comma((stats_dict or {}).get("likes", 0))
     cm = _comma((stats_dict or {}).get("comments", 0))
     ti = _demp_percent(stats_dict or {})
-    elems.append(Paragraph(f"Channels: {ch} • Days: {dy} • Views: {vw} • Likes: {lk} • Comments: {cm} • <b>Traction Index: {ti}</b>", label))
+
+    elems.append(Paragraph(
+        f"Channels: {ch} • Days: {dy} • Views: {vw} • Likes: {lk} • Comments: {cm} • "
+        f"<b>Traction Index: {ti}</b>", 
+        label
+    ))
     elems.append(Spacer(1, 5 * mm))
+
     ai_insights = html.escape(header_row.get("ai_insights", "") or "")
     summary = html.escape(header_row.get("ai_summary", "") or "")
     hashtags = html.escape(header_row.get("ai_hashtags", "") or "")
@@ -480,7 +484,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     col_widths = [r * avail_w for r in ratios]
     cell = ParagraphStyle("cell", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=12, textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
     header_style = ParagraphStyle("hdr", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=9, textColor=colors.white)
-    rows = [[Paragraph("Thumb", header_style), Paragraph("Logo", header_style), Paragraph("Title", header_style), Paragraph("Channel", header_style), Paragraph("Views", header_style), Paragraph("Likes", header_style), Paragraph("Comments", header_style), Paragraph("Published", header_style), Paragraph("URL", header_style)]]
+    rows = [[Paragraph("Thumb", header_style), Paragraph("Logo", header_style), Paragraph("Title", header_style),Paragraph("Channel", header_style), Paragraph("Views", header_style), Paragraph("Likes", header_style),Paragraph("Comments", header_style), Paragraph("Published", header_style), Paragraph("URL", header_style)]]
     _PLACEHOLDER_PNG_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAYAAABZxZ2mAAAACXBIWXMAAAsSAAALEgHS3X78AAABcElEQVR4nO3aMU7DQBQF4S8"
         "n3Z2lq8l7h7gQyqG1w1t6o3V5y1g0o0s7gY8w0S8yQ3e/0Qq+f3g0G7V8g6h9C4a+qf8F4h2JbCwAAAAAAAAAAAAAA8D9c7R3v1z3x"
         "mRrQeD0q4m8l7bqD3hYV0mJ9G5x1k8s2w3uK2pQy2e6sQ2v8cK4dZr7fKcG9fW2nq6dDkFqS5f2y0W3e5H5nq1m9bq8cJQ0nJ9h0Z/"
@@ -545,53 +549,15 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         logo_src_url = r.get("channel_url")
         thumb = _img_from_any(thumb_src, thumb_box_w, thumb_box_h)
         logo = _logo_from_channel(logo_src_thumb, logo_src_url, logo_box_w, logo_box_h)
-        rows.append([
-            thumb,
-            logo,
-            Paragraph(html.escape(str(r.get("title", "") or "")), cell),
-            Paragraph(html.escape(str(r.get("channel_title", "") or "")), cell),
-            _comma(r.get("view_count")),
-            _comma(r.get("like_count")),
-            _comma(r.get("comment_count")),
-            (r["published_at"].strftime("%Y-%m-%d %H:%M") if pd.notna(r["published_at"]) else ""),
-            Paragraph(html.escape(str(r.get("url", "") or "")), cell)
-        ])
+        rows.append([thumb, logo, Paragraph(html.escape(str(r.get("title", "") or "")), cell), Paragraph(html.escape(str(r.get("channel_title", "") or "")), cell), _comma(r.get("view_count")), _comma(r.get("like_count")), _comma(r.get("comment_count")), (r["published_at"].strftime("%Y-%m-%d %H:%M") if pd.notna(r["published_at"]) else ""), Paragraph(html.escape(str(r.get("url", "") or "")), cell)])
     tbl = Table(rows, colWidths=col_widths, repeatRows=1)
-    tbl.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("FONTSIZE",(0,0),(-1,-1),8),
-        ("ALIGN",(4,1),(6,-1),"CENTER"),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),
-        ("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),
-        ("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
-        ("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
-        ("LEFTPADDING",(0,0),(-1,-1),5),
-        ("RIGHTPADDING",(0,0),(-1,-1),5),
-        ("TOPPADDING",(0,0),(-1,-1),4),
-        ("BOTTOMPADDING",(0,0),(-1,-1),4),
-    ]))
+    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTSIZE",(0,0),(-1,-1),8),("ALIGN",(4,1),(6,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]))
     elems.append(tbl)
     elems.append(Spacer(1, 6 * mm))
     elems.append(Paragraph("Relevant Articles", table_title))
     elems.append(Spacer(1, 2 * mm))
     ar = articles_df.copy()
     ar["published"] = pd.to_datetime(ar.get("published"), errors="coerce")
-    if "video_id" in ar.columns:
-        ar = ar[ar["video_id"].isna() | (ar["video_id"].astype(str).str.strip() == "")]
-    ar = ar[
-        (ar.get("title", "").astype(str).str.strip() != "") &
-        (
-            (ar.get("link", "").astype(str).str.startswith("http")) |
-            (ar.get("url",  "").astype(str).str.startswith("http")) |
-            (ar.get("source", "").astype(str).str.strip() != "") |
-            (ar.get("publisher", "").astype(str).str.strip() != "")
-        )
-    ]
-    if "score" in ar.columns:
-        ar["score"] = pd.to_numeric(ar["score"], errors="coerce").fillna(0.0)
-        ar = ar[ar["score"] >= 0.18]
     a_avail_w = L[0] - lm - rm
     a_ratios = [0.06, 0.12, 0.48, 0.14, 0.20]
     a_col_w = [r * a_avail_w for r in a_ratios]
@@ -608,81 +574,11 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         icon = _favicon_for_url(link, a_icon_w, a_icon_h)
         a_rows.append([icon, Paragraph(html.escape(str(src)), a_cell), Paragraph(html.escape(str(ttl)), a_cell), Paragraph(html.escape(pub_s), a_cell), Paragraph(html.escape(str(link)), a_cell)])
     a_tbl = Table(a_rows, colWidths=a_col_w, repeatRows=1)
-    a_tbl.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("FONTSIZE",(0,0),(-1,-1),8),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),
-        ("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),
-        ("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
-        ("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
-        ("LEFTPADDING",(0,0),(-1,-1),5),
-        ("RIGHTPADDING",(0,0),(-1,-1),5),
-        ("TOPPADDING",(0,0),(-1,-1),4),
-        ("BOTTOMPADDING",(0,0),(-1,-1),4),
-    ]))
+    a_tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTSIZE",(0,0),(-1,-1),8),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]))
     elems.append(a_tbl)
-    elems.append(NextPageTemplate("Landscape"))
-    elems.append(PageBreak())
-    elems.append(Paragraph("Channels Included in This Report", table_title))
-    elems.append(Spacer(1, 2 * mm))
-    ch_df = videos_df.copy()
-    for c in ["channel_title","channel_url","channel_thumb","channel_origin","channel_subscribers","channel_total_views","published_at"]:
-        if c not in ch_df.columns:
-            ch_df[c] = ""
-    ch_df["published_at"] = pd.to_datetime(ch_df.get("published_at"), errors="coerce")
-    ch_df["channel_url_norm"] = ch_df.get("channel_url","").astype(str).str.strip().str.lower().str.replace(r"/+$","", regex=True)
-    ch_df = ch_df.sort_values("published_at", ascending=False).drop_duplicates(subset=["channel_url_norm"], keep="first")
-    c_avail_w = L[0] - lm - rm
-    c_ratios = [0.08, 0.26, 0.12, 0.12, 0.10, 0.32]
-    c_col_w = [r * c_avail_w for r in c_ratios]
-    c_header_style = header_style
-    c_cell = a_cell
-    c_rows = [[
-        Paragraph("Logo", c_header_style),
-        Paragraph("Channel", c_header_style),
-        Paragraph("Subscribers", c_header_style),
-        Paragraph("Total Views", c_header_style),
-        Paragraph("Country", c_header_style),
-        Paragraph("URL", c_header_style),
-    ]]
-    logo_w, logo_h = c_col_w[0], 18
-    for r in ch_df.to_dict("records"):
-        logo = _logo_from_channel(r.get("channel_thumb",""), r.get("channel_url",""), logo_w, logo_h)
-        name = r.get("channel_title") or ""
-        subs = _comma(r.get("channel_subscribers") or 0)
-        tviews = _comma(r.get("channel_total_views") or 0)
-        country = r.get("channel_origin") or ""
-        url = r.get("channel_url") or ""
-        c_rows.append([
-            logo,
-            Paragraph(html.escape(str(name)), c_cell),
-            Paragraph(subs, c_cell),
-            Paragraph(tviews, c_cell),
-            Paragraph(html.escape(str(country)), c_cell),
-            Paragraph(html.escape(str(url)), c_cell),
-        ])
-    c_tbl = Table(c_rows, colWidths=c_col_w, repeatRows=1)
-    c_tbl.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0e1629")),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("FONTSIZE",(0,0),(-1,-1),8),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.HexColor("#f1f5f9"),colors.HexColor("#e2e8f0")]),
-        ("TEXTCOLOR",(0,1),(-1,-1),colors.HexColor("#0e1629")),
-        ("INNERGRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
-        ("BOX",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),
-        ("LEFTPADDING",(0,0),(-1,-1),5),
-        ("RIGHTPADDING",(0,0),(-1,-1),5),
-        ("TOPPADDING",(0,0),(-1,-1),4),
-        ("BOTTOMPADDING",(0,0),(-1,-1),4),
-    ]))
-    elems.append(c_tbl)
     doc.build(elems)
     buf.seek(0)
     return buf.getvalue()
-
 
 def render_detail_page(topic: str):
     st.markdown("<a href='?' style='text-decoration:none'>&larr; Back to dashboard</a>", unsafe_allow_html=True)
@@ -694,16 +590,16 @@ def render_detail_page(topic: str):
     header = rep_row[0] if rep_row else {"topic": topic, "ai_insights": "", "ai_summary": "", "ai_hashtags": "", "created_at": ""}
     st.markdown("## AI Reports")
     st.markdown(report_card_html_pro({"topic": topic, **header}, 1, logos, stats, is_local), unsafe_allow_html=True)
-    show_v = videos[videos["topic"].apply(lambda x: _norm_topic_val(str(x)) == norm)].copy()
+    show_v = total_df_final[total_df_final["topic"].apply(lambda x: _norm_topic_val(str(x)) == norm)].copy()
     if not show_v.empty:
         show_v["__is_english__"] = show_v["title"].apply(is_english_title)
         show_v = show_v[show_v["__is_english__"] == True]
         if is_local:
             show_v = show_v[show_v["title"].str.contains(r"\bpakistan\b", case=False, na=False) | show_v["title"].str.contains("پاکستان", case=False, na=False)]
-        #else:
-            #show_v["channel_url_norm"] = _norm_url(show_v.get("channel_url", ""))
-            #allow_set = set(allow["channel_url_norm"].tolist())
-            #show_v = show_v[show_v["channel_url_norm"].isin(allow_set)]
+        else:
+            show_v["channel_url_norm"] = _norm_url(show_v.get("channel_url", ""))
+            allow_set = set(allow["channel_url_norm"].tolist())
+            show_v = show_v[show_v["channel_url_norm"].isin(allow_set)]
         show_v["published_at"] = pd.to_datetime(show_v["published_at"], errors="coerce")
         show_v["__title_key__"] = show_v["title"].apply(normalize_text)
         show_v = (show_v.sort_values(["published_at", "video_id"], ascending=[False, True]).drop_duplicates(subset=["__title_key__", "published_at"], keep="first").drop(columns=["__title_key__", "__is_english__", "channel_url_norm"], errors="ignore"))
