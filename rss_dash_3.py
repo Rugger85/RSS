@@ -342,7 +342,7 @@ videos_local["topic"] = videos_local.get("topic")
 videos_int = videos.copy()
 videos_int["channel_url_norm"] = _norm_url(videos_int.get("channel_url", ""))
 allow["channel_url_norm"] = _norm_url(allow.get("channel_url", ""))
-videos_int = videos_int[videos_int["channel_url_norm"].isin(allow["channel_url_norm"])]
+#videos_int = videos_int[videos_int["channel_url_norm"].isin(allow["channel_url_norm"])]
 if "channel_origin" in videos_int.columns:
     videos_int = videos_int[videos_int["channel_origin"] != "Pakistan"]
 
