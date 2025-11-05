@@ -342,7 +342,7 @@ videos_local["topic"] = videos_local.get("topic")
 videos_int = videos.copy()
 videos_int["channel_url_norm"] = _norm_url(videos_int.get("channel_url", ""))
 allow["channel_url_norm"] = _norm_url(allow.get("channel_url", ""))
-videos_int = videos_int[videos_int["channel_url_norm"].isin(allow["channel_url_norm"])]
+#videos_int = videos_int[videos_int["channel_url_norm"].isin(allow["channel_url_norm"])]
 if "channel_origin" in videos_int.columns:
     videos_int = videos_int[videos_int["channel_origin"] != "Pakistan"]
 
@@ -557,6 +557,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     elems.append(Paragraph("Relevant Articles", table_title))
     elems.append(Spacer(1, 2 * mm))
     ar = articles_df.copy()
+    st.dataframe(ar)
     ar["published"] = pd.to_datetime(ar.get("published"), errors="coerce")
     a_avail_w = L[0] - lm - rm
     a_ratios = [0.06, 0.12, 0.48, 0.14, 0.20]
@@ -597,9 +598,9 @@ def render_detail_page(topic: str):
         if is_local:
             show_v = show_v[show_v["title"].str.contains(r"\bpakistan\b", case=False, na=False) | show_v["title"].str.contains("پاکستان", case=False, na=False)]
         else:
-            show_v["channel_url_norm"] = _norm_url(show_v.get("channel_url", ""))
-            allow_set = set(allow["channel_url_norm"].tolist())
-            show_v = show_v[show_v["channel_url_norm"].isin(allow_set)]
+            #show_v["channel_url_norm"] = _norm_url(show_v.get("channel_url", ""))
+            #allow_set = set(allow["channel_url_norm"].tolist())
+            #show_v = show_v[show_v["channel_url_norm"].isin(allow_set)]
         show_v["published_at"] = pd.to_datetime(show_v["published_at"], errors="coerce")
         show_v["__title_key__"] = show_v["title"].apply(normalize_text)
         show_v = (show_v.sort_values(["published_at", "video_id"], ascending=[False, True]).drop_duplicates(subset=["__title_key__", "published_at"], keep="first").drop(columns=["__title_key__", "__is_english__", "channel_url_norm"], errors="ignore"))
