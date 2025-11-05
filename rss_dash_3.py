@@ -788,29 +788,64 @@ else:
         st.markdown("International")
         render_title_ticker(ticker_rows_int, title="", ticker_speed=max(6, int(ticker_speed * 0.8)), row_gap=max(6, int(row_gap * 0.6)), seamless_scroll=seamless, height=100)
     with a2:
-        country_counts = (videos["channel_origin"].astype(str).str.strip().replace({"": pd.NA, "nan": pd.NA}).dropna().value_counts().rename_axis("Country").reset_index(name="Videos"))
-        if not country_counts.empty:
-            fig = px.choropleth(country_counts, locations="Country", locationmode="country names", color="Videos", color_continuous_scale="Blues")
-            fig.update_geos(fitbounds="locations", visible=False)
-            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", font_color=THEME["ink"], coloraxis_showscale=False, height=420)
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.markdown(f"""
+    import pycountry
+
+    # 1️⃣ Clean and standardize the origin codes (like US, IN, PK)
+    origins = (
+        videos.get("channel_origin", pd.Series(dtype=str))
+              .astype(str)
+              .str.strip()
+              .str.upper()
+              .replace({"": pd.NA, "NAN": pd.NA})
+              .dropna()
+    )
+
+    # 2️⃣ Convert ISO-2 or name to ISO-3 (for Plotly)
+    def to_iso3(x: str):
+        aliases = {"UK": "GBR", "UAE": "ARE", "KSA": "SAU", "USA": "USA"}
+        if x in aliases:
+            return aliases[x]
+        c = pycountry.countries.get(alpha_2=x)
+        if c:
+            return c.alpha_3
+        try:
+            return pycountry.countries.lookup(x).alpha_3
+        except Exception:
+            return None
+
+    iso3 = origins.map(to_iso3)
+    country_counts = (
+        iso3.dropna()
+            .value_counts()
+            .rename_axis("iso3")
+            .reset_index(name="Videos")
+    )
+
+    # 3️⃣ Plotly choropleth with ISO-3 codes
+    if not country_counts.empty:
+        import plotly.express as px
+        fig = px.choropleth(
+            country_counts,
+            locations="iso3",
+            locationmode="ISO-3",
+            color="Videos",
+            color_continuous_scale="Blues",
+            scope="world",
+        )
+        fig.update_geos(fitbounds="locations", visible=False)
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0),
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            font_color=THEME["ink"],
+            coloraxis_showscale=False,
+            height=420
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.markdown(f"""
 <div style="background:{THEME['card']};border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 16px;box-shadow:0 3px 10px rgba(2,6,23,.18);color:{THEME['muted']};font-weight:700;">
   Channel Origins Map — No countries found
 </div>
 """, unsafe_allow_html=True)
-    st.markdown("## AI Reports")
-    if results.empty:
-        st.info("No reports available.")
-    else:
-        latest_per_topic = results.sort_values("created_at", ascending=False).dropna(subset=["topic"]).drop_duplicates(subset=["topic"], keep="first")
-        i = 1
-        for r in latest_per_topic.to_dict("records"):
-            t = r.get("topic", "")
-            is_local = is_pk_topic(t)
-            norm = _norm_topic_val(t)
-            logos = logos_map_all.get(norm, [])
-            stats = stats_map_all.get(norm, {})
-            st.markdown(report_card_html_pro(r, i, logos, stats, is_local), unsafe_allow_html=True)
-            i += 1
+
