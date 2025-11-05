@@ -580,7 +580,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     ar["published"] = pd.to_datetime(ar.get("published"), errors="coerce")
     if "score" in ar.columns:
         ar["score"] = pd.to_numeric(ar["score"], errors="coerce").fillna(0.0)
-        ar = ar[ar["score"] >= 0.15]
+        ar = ar[ar["score"] >= 0.18]
     a_avail_w = L[0] - lm - rm
     a_ratios = [0.06, 0.12, 0.48, 0.14, 0.20]
     a_col_w = [r * a_avail_w for r in a_ratios]
