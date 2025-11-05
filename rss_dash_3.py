@@ -701,7 +701,7 @@ def render_detail_page(topic: str):
         if is_local:
             show_v = show_v[show_v["title"].str.contains(r"\bpakistan\b", case=False, na=False) | show_v["title"].str.contains("پاکستان", case=False, na=False)]
         #else:
-            show_v["channel_url_norm"] = _norm_url(show_v.get("channel_url", ""))
+            #show_v["channel_url_norm"] = _norm_url(show_v.get("channel_url", ""))
             #allow_set = set(allow["channel_url_norm"].tolist())
             #show_v = show_v[show_v["channel_url_norm"].isin(allow_set)]
         show_v["published_at"] = pd.to_datetime(show_v["published_at"], errors="coerce")
