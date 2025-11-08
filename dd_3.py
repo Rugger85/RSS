@@ -1124,7 +1124,7 @@ if _view == "report" and _topic:
 # --------------------------------------------------------------------------------------
 def render_main():
     # --- HERO ---
-    IMG_PATH = r"D:\Downloads\YouTube Project\soft\soft\rainbow-coloured-abstract-low-poly-banner-design\12818.jpg"
+    IMG_PATH = "https://raw.githubusercontent.com/Rugger85/RSS/main/12818.jpg"
     uri = to_data_uri(IMG_PATH)
     if uri is None:
         st.warning("Local image not found or unreadable. Showing an online fallback.")
@@ -1759,3 +1759,4 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
