@@ -1737,6 +1737,38 @@ with st.sidebar:
     )
 
     picked_topics = st.multiselect("Select two or more topics to include", options=_all_topics, help="Each topic will retain its own first-page design and AI summary.")
+    import streamlit as st
+
+    st.markdown("""
+    <style>
+    /* Match button with "Recent Issues" card */
+    div.stButton > button:first-child {
+        background: white;
+        color: #111;
+        font-weight: 600;
+        border: none;
+        border-radius: 14px;
+        padding: 14px 22px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: all 0.25s ease;
+    }
+    
+    /* Hover effect for soft elevation */
+    div.stButton > button:first-child:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        background: #f8f9fa;
+    }
+    
+    /* Optional: focus/active effect */
+    div.stButton > button:first-child:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
     if st.button("Generate Combined PDF"):
         #⬇️ 
         if not picked_topics:
@@ -1760,6 +1792,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
