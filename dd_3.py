@@ -1124,21 +1124,11 @@ if _view == "report" and _topic:
 # --------------------------------------------------------------------------------------
 def render_main():
     # --- HERO ---
-    IMG_PATH = "https://raw.githubusercontent.com/Rugger85/RSS/main/12818.jpg"
-
-    # You don't need to_data_uri for remote images
-    uri = IMG_PATH
-
-    # Optional fallback if the URL is broken
-    try:
-        resp = requests.head(uri, timeout=5)
-        if resp.status_code != 200:
-            raise Exception("Broken link")
-    except Exception:
-        st.warning("GitHub image not reachable, showing fallback.")
+    IMG_PATH = r"D:\Downloads\YouTube Project\soft\soft\rainbow-coloured-abstract-low-poly-banner-design\12818.jpg"
+    uri = to_data_uri(IMG_PATH)
+    if uri is None:
+        st.warning("Local image not found or unreadable. Showing an online fallback.")
         uri = "https://images.unsplash.com/photo-1445452916036-9022dfd33aa8?q=80&w=2400&auto=format&fit=crop"
-
-    st.image(uri, use_container_width=True)
 
 
     st.markdown(f"""
