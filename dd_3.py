@@ -23,17 +23,6 @@ try:
 except Exception:
     from PyPDF2 import PdfReader, PdfWriter
 
-hide_streamlit_style = """
-        <style>
-        /* Hide header */
-        header {visibility: hidden;}
-        
-        /* Hide footer */
-        footer {visibility: hidden;}
-        </style>
-    """
-
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # --------------------------------------------------------------------------------------
 # Page setup
 # --------------------------------------------------------------------------------------
@@ -1803,6 +1792,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
