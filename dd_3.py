@@ -22,8 +22,7 @@ try:
     from pypdf import PdfReader, PdfWriter
 except Exception:
     from PyPDF2 import PdfReader, PdfWriter
-warnings.filterwarnings('ignore')
-st.set_page_config(layout="wide")
+
 hide_streamlit_style = """
         <style>
         /* Hide header */
@@ -1804,6 +1803,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
