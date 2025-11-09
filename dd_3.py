@@ -227,11 +227,12 @@ def short(n):
         n = float(n)
     except (TypeError, ValueError):
         return str(n)
-    for div, suf in ((1e9,"B"), (1e6,"M"), (1e3,"k")):
+    for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "k")):
         if abs(n) >= div:
-            x = n/div
-            return f"{x:.2f}{suf}".rstrip("0").rstrip(".")
-    return str(int(n)) if float(n).is_integer() else str(n)
+            x = n / div
+            return f"{x:.1f}{suf}".rstrip("0").rstrip(".")
+    return str(int(n)) if float(n).is_integer() else f"{n:.1f}".rstrip("0").rstrip(".")
+
 
 def _placeholder_img(seed: str) -> str:
     h = hashlib.md5(seed.encode("utf-8")).hexdigest()[:8]
@@ -1792,6 +1793,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
