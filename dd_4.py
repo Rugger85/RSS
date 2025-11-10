@@ -1147,14 +1147,552 @@ if _topic:
 if _view == "report" and _topic:
     render_detail_page(_topic)
     st.stop()
+import os
+import json
+import pandas as pd
+import numpy as np
+import streamlit as st
+from sqlalchemy import create_engine, text
+
+st.set_page_config(page_title="Pakistan Insights — Videos & Topics", layout="wide")
+
+# -----------------------------
+# DB helpers
+# -----------------------------
+# def get_engine():
+#     db_url = 'postgresql://neondb_owner:npg_2w1oKXamdsOr@ep-divine-lab-a4rip6ll-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+#     return create_engine(db_url, pool_pre_ping=True) if db_url else None
+
+def load_from_db_2():
+    engine = ENGINE
+    if engine is None:
+        return None, None
+    with engine.begin() as con:
+        videos_2 = pd.read_sql(text("""
+            SELECT 
+                channel_origin,
+                channel_title,
+                view_count, like_count, comment_count,
+                topic, title, description,
+                published_at, duration_hms, url
+            FROM videos
+        """), con)
+
+        ai_topics_2 = pd.read_sql(text("""
+            SELECT
+                score, topic, source,
+                created_at, title, summary, link
+            FROM ai_topics
+        """), con)
+    return videos_2, ai_topics_2
+
+def _video_url_from_row(r: dict) -> str:
+    u = (r.get("url") or "").strip()
+    if not u:
+        vid = (r.get("video_id") or r.get("videoId") or "").strip()
+        if vid:
+            u = f"https://www.youtube.com/watch?v={vid}"
+    return u
+
+def _article_url_from_row(r: dict) -> str:
+    return (r.get("link") or "").strip()
+
+def _maybe_anchor(url: str, text: str) -> str:
+    return (f'<a href="{html.escape(url)}" target="_blank" rel="noopener noreferrer" '
+            f'style="text-decoration:none;color:#6B3F69">{html.escape(text)}</a>') if url else html.escape(text)
+
+
+def build_fallback():
+    # synthetic demo data spanning the last 14 days
+    days = pd.date_range(pd.Timestamp.today().normalize() - pd.Timedelta(days=13), periods=14, freq="D")
+    vids = pd.DataFrame({
+        "channel_origin": ["Pakistan"] * 40,
+        "channel_title": np.random.choice(["PK News","PakTech","Karachi Sports"], size=40),
+        "view_count": np.random.randint(100, 10000, size=40),
+        "like_count": np.random.randint(10, 500, size=40),
+        "comment_count": np.random.randint(0, 100, size=40),
+        "topic": np.random.choice(
+            ["Pakistan economy", "Pakistan politics", "Cricket in Pakistan", "Tech", "Energy"], size=40
+        ),
+        "title": np.random.choice(["Pakistan update", "Daily news", "Highlights"], size=40),
+        "description": np.random.choice(["Pakistan wins", "Market watch Pakistan", "Other"], size=40),
+        "published_at": np.random.choice(days, size=40),
+        "duration_hms": ["00:10:00"] * 40,
+    })
+    topics = [
+        "Pakistan Afghanistan peace talks", "Pakistan migrant crackdown",
+        "Transnational terror networks in South Asia", "Pakistan economic reforms",
+        "Pakistan trade relations"
+    ]
+    ai = pd.DataFrame({
+        "score": np.random.randint(5, 21, size=len(topics)),
+        "topic": np.random.choice(topics, size=len(topics)),
+        "source": ["Pakistan"] * len(topics),
+        "created_at": np.random.choice(days, size=len(topics)),
+        "title": [f"PK article {i}" for i in range(len(topics))],
+        "summary": [f"Analysis about Pakistan {i}" for i in range(len(topics))]
+    })
+    return vids, ai
+
+videos_df_2, ai_topics_df_2 = load_from_db_2()
+if videos_df_2 is None or ai_topics_df_2 is None:
+    st.info("No database configured — showing demo data.")
+    videos_df_2, ai_topics_df_2 = build_fallback()
+
+# -----------------------------
+# Helpers / filters
+# -----------------------------
+def contains_pakistan(s: object) -> bool:
+    if s is None:
+        return False
+    return "pakistan" in str(s).lower()
+
+# --- Filter for daily counts (videos: title/topic/description; articles: title/topic/summary)
+videos_pk_2 = videos_df_2[
+    videos_df_2["title"].apply(contains_pakistan)
+    #| videos_df_2["topic"].apply(contains_pakistan)
+    #| videos_df_2["description"].apply(contains_pakistan)
+].copy()
+
+ai_pk_2 = ai_topics_df_2[
+    ai_topics_df_2["title"].apply(contains_pakistan)
+    | ai_topics_df_2["topic"].apply(contains_pakistan)
+    | ai_topics_df_2["summary"].apply(contains_pakistan)
+].copy()
+
+# -----------------------------
+# Daily frequency for last 14 days (X-axis)
+# -----------------------------
+today = pd.Timestamp.today().normalize()
+start = today - pd.Timedelta(days=7)
+index_days = pd.date_range(start, today, freq="D")
+
+# Videos by day (published_at)
+if "published_at" in videos_pk_2.columns:
+    videos_pk_2["published_at"] = pd.to_datetime(videos_pk_2["published_at"], errors="coerce").dt.tz_localize(None)
+    vid_counts = (
+        videos_pk_2.dropna(subset=["published_at"])
+        .assign(day=lambda d: d["published_at"].dt.normalize())
+        .query("day >= @start and day <= @today")
+        .groupby("day").size()
+        .reindex(index_days, fill_value=0)
+    )
+else:
+    vid_counts = pd.Series(0, index=index_days)
+
+# Articles by day (created_at)
+if "created_at" in ai_pk_2.columns:
+    ai_pk_2["created_at"] = pd.to_datetime(ai_pk_2["created_at"], errors="coerce").dt.tz_localize(None)
+    art_counts = (
+        ai_pk_2.dropna(subset=["created_at"])
+        .assign(day=lambda d: d["created_at"].dt.normalize())
+        .query("day >= @start and day <= @today")
+        .groupby("day").size()
+        .reindex(index_days, fill_value=0)
+    )
+else:
+    art_counts = pd.Series(0, index=index_days)
+
+# -----------------------------
+# RADAR: topics CONTAINING "Pakistan"
+# strength = (#videos + #articles) per topic (exact topic strings)
+# -----------------------------
+videos_topic_2 = (
+    videos_df_2[videos_df_2["topic"].apply(contains_pakistan)]
+    .groupby("topic", as_index=True)
+    .size()
+    .rename("video_cnt")
+)
+
+articles_topic_2 = (
+    ai_topics_df_2[ai_topics_df_2["topic"].apply(contains_pakistan)]
+    .groupby("topic", as_index=True)
+    .size()
+    .rename("article_cnt")
+)
+
+topic_strength_2 = (
+    pd.concat([videos_topic_2, articles_topic_2], axis=1)
+    .fillna(0)
+    .assign(value=lambda d: d["video_cnt"] + d["article_cnt"])
+    .sort_values("value", ascending=False)
+)
+
+# keep top N to keep radar readable
+N = 10
+topic_strength_2 = topic_strength_2.head(N)
+
+radar_labels = topic_strength_2.index.tolist()
+radar_values = topic_strength_2["value"].astype(float).tolist()
+
+# -----------------------------
+# Build payloads for Chart.js
+# -----------------------------
+line_labels = [d.strftime("%b %d") for d in index_days]
+videos_series = vid_counts.astype(int).tolist()
+articles_series = art_counts.astype(int).tolist()
+
+line_labels_json = json.dumps(line_labels)
+videos_json = json.dumps(videos_series)
+articles_json = json.dumps(articles_series)
+radar_labels_json = json.dumps(radar_labels)
+radar_values_json = json.dumps(radar_values)
+
+def _esc(s):  # tiny HTML escaper for safe embedding
+    return html.escape(str(s or ""))
+
+def _make_list(items, kind):
+    rows = []
+    for it in items[:40]:
+        url   = (it.get("url") or "").strip()
+        title = _esc(it.get("title"))
+        meta  = _esc(it.get("meta",""))
+        icon  = (f'<img src="{_esc(it.get("icon",""))}" referrerpolicy="no-referrer" '
+                 f'style="width:16px;height:16px;border-radius:3px;vertical-align:-3px;'
+                 f'margin-right:6px;border:1px solid rgba(0,0,0,.12)"/>' ) if it.get("icon") else ""
+
+        # Title: only wrap in <a> if we actually have a URL
+        if url:
+            title_html = (f'<a href="{_esc(url)}" target="_blank" rel="noopener noreferrer" '
+                          f'style="text-decoration:none;color:#6B3F69">{title}</a>')
+        else:
+            title_html = f'{title}'
+
+        # Thumb: link only if we have both thumb and url; otherwise plain image
+        thumb_src = it.get("thumb","")
+        if thumb_src and url:
+            thumb_html = (f'<a href="{_esc(url)}" target="_blank" rel="noopener noreferrer">'
+                          f'<img src="{_esc(thumb_src)}" referrerpolicy="no-referrer" '
+                          f'style="width:100%;height:auto;border-radius:10px;margin-top:6px"/></a>')
+        elif thumb_src:
+            thumb_html = (f'<img src="{_esc(thumb_src)}" referrerpolicy="no-referrer" '
+                          f'style="width:100%;height:auto;border-radius:10px;margin-top:6px"/>')
+        else:
+            thumb_html = ""
+
+        rows.append(f"""
+          <div style="border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:10px;margin:8px 0;background:#fff;">
+            <div style="font-weight:800;color:#1f2937">{icon}{title_html}</div>
+            <div style="color:#475569;font-weight:600;margin-top:2px">{meta}</div>
+            {thumb_html}
+          </div>
+        """)
+
+    return "".join(rows) or f"<div style='color:#64748b'>No {kind} for this selection.</div>"
+
+
+# ---------- Line-chart (date) -> popup content ----------
+line_detail_map = {}
+for d in index_days:
+    # videos on this day
+    v = videos_pk_2.dropna(subset=["published_at"]).assign(day=lambda x: x["published_at"].dt.normalize())
+    v = v.loc[v["day"].eq(d)]
+    v_items = [{
+        "title": r.get("title",""),
+        "meta": f'{r.get("channel_title","")} · {str(pd.to_datetime(r.get("published_at"))).split(".")[0] if pd.notna(r.get("published_at")) else ""}',
+        "url": _video_url_from_row(r),
+        "thumb": r.get("thumbnail",""),
+        "icon": _favicon_from_any_url(r.get("channel_url","") or "")
+    } for _, r in v.iterrows()]
+
+    # articles on this day
+    a = ai_pk_2.dropna(subset=["created_at"]).assign(day=lambda x: x["created_at"].dt.normalize())
+    a = a.loc[a["day"].eq(d)]
+    a_items = [{
+        "title": r.get("title",""),
+        "meta": f'{r.get("source","")} · {str(pd.to_datetime(r.get("created_at"))).split(".")[0] if pd.notna(r.get("created_at")) else ""}',
+        "url": _article_url_from_row(r),
+        "icon": _favicon_from_any_url(r.get("link","") or r.get("source",""))
+    } for _, r in a.iterrows()]
+
+    day_label = d.strftime("%b %d")
+    line_detail_map[day_label] = f"""
+      <h3 style='margin:0 0 6px 0;color:#0f172a'>{day_label}</h3>
+      <div style='margin:8px 0 4px;font-weight:800;color:#334155'>Videos</div>
+      {_make_list(v_items, "videos")}
+      <div style='margin:14px 0 4px;font-weight:800;color:#334155'>Articles</div>
+      {_make_list(a_items, "articles")}
+    """
+
+# ---------- Radar (topic) -> popup content ----------
+radar_detail_map = {}
+for topic in radar_labels:
+    # exact topic match for compactness; change to .str.contains if you prefer
+    vv = videos_df_2.loc[videos_df_2["topic"].astype(str).str.lower()==topic.lower()]
+    aa = ai_topics_df_2.loc[ai_topics_df_2["topic"].astype(str).str.lower()==topic.lower()]
+
+    v_items = [{
+        "title": r.get("title",""),
+        "meta": f'{r.get("channel_title","")} · {str(pd.to_datetime(r.get("published_at"))).split(".")[0] if pd.notna(r.get("published_at")) else ""}',
+        "url": _video_url_from_row(r),
+        "thumb": r.get("thumbnail",""),
+        "icon": _favicon_from_any_url(r.get("channel_url","") or "")
+    } for _, r in vv.iterrows()]
+
+    a_items = [{
+        "title": r.get("title",""),
+        "meta": f'{r.get("source","")} · {str(pd.to_datetime(r.get("created_at"))).split(".")[0] if pd.notna(r.get("created_at")) else ""}',
+        "url": _article_url_from_row(r),
+        "icon": _favicon_from_any_url(r.get("link","") or r.get("source",""))
+    } for _, r in aa.iterrows()]
+
+    radar_detail_map[topic] = f"""
+      <h3 style='margin:0 0 6px 0;color:#0f172a'>{ _esc(topic) }</h3>
+      <div style='margin:8px 0 4px;font-weight:800;color:#334155'>Videos</div>
+      {_make_list(v_items, "videos")}
+      <div style='margin:14px 0 4px;font-weight:800;color:#334155'>Articles</div>
+      {_make_list(a_items, "articles")}
+    """
+
+line_detail_map_json  = json.dumps(line_detail_map)
+radar_detail_map_json = json.dumps(radar_detail_map)
+
+
+# -----------------------------
+# Layout
+# -----------------------------
+# st.title("Pakistan Insights")
+# col1, col2 = st.columns([1, 1])
+
+# with col1:
+#     st.subheader("Daily frequency (last 14 days)")
+# with col2:
+#     st.subheader("Pakistan Topic Strength (videos + articles)")
+
+# -----------------------------
+# Line chart with LOG Y-AXIS
+# -----------------------------
+line_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+<style>
+  body {{ margin:0; background:transparent; font-family: ui-sans-serif, system-ui, -apple-system; }}
+  #wrap {{
+    width:100%; height:280px; position:relative;
+    border-radius:14px; border:0px solid rgba(2,6,23,.08);
+    box-shadow:0 8px 18px rgba(15,23,42,.15);
+    background:#fff; overflow:hidden;
+  }}
+  canvas {{ position:absolute; inset:10px; width:calc(100% - 20px) !important; height:calc(100% - 20px) !important; }}
+
+  /* Modal */
+  .modal-backdrop {{
+    position:fixed; inset:0; background:rgba(2,6,23,.45); display:none; align-items:center; justify-content:center; z-index:9999;
+  }}
+  .modal-card {{
+    width:min(860px, 92vw); max-height:80vh; overflow:auto;
+    background:#fff; border-radius:16px; box-shadow:0 16px 40px rgba(0,0,0,.28);
+    padding:18px 18px 22px; border:1px solid rgba(2,6,23,.08);
+  }}
+  .modal-close {{
+    position:absolute; right:18px; top:14px; background:#fff; border:1px solid rgba(0,0,0,.12);
+    border-radius:10px; padding:6px 10px; font-weight:800; cursor:pointer;
+  }}
+</style>
+</head>
+<body>
+  <div id="wrap"><canvas id="chart"></canvas></div>
+
+  <!-- modal -->
+  <div class="modal-backdrop" id="dayModal">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-close" onclick="hideModal()">Close ✕</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+<script>
+const detailMap = {line_detail_map_json};
+const labels  = {line_labels_json};
+const vidsRaw = {videos_json};
+const artsRaw = {articles_json};
+const eps = 0.5;
+const vids = vidsRaw.map(v => v === 0 ? eps : v);
+const arts = artsRaw.map(v => v === 0 ? eps : v);
+
+const el = document.getElementById('chart');
+const ctx = el.getContext('2d');
+
+function purpleFill(context) {{
+  const chart = context.chart, ca = chart.chartArea;
+  if (!ca) return 'rgba(91,0,102,0.30)';
+  const g = chart.ctx.createLinearGradient(0, ca.top, 0, ca.bottom);
+  g.addColorStop(0, 'rgba(59,0,102,0.40)'); g.addColorStop(1, 'rgba(209,161,255,0.15)'); return g;
+}}
+function greenFill(context) {{
+  const chart = context.chart, ca = chart.chartArea;
+  if (!ca) return 'rgba(0,102,51,0.30)';
+  const g = chart.ctx.createLinearGradient(0, ca.top, 0, ca.bottom);
+  g.addColorStop(0, 'rgba(0,77,26,0.40)'); g.addColorStop(1, 'rgba(57,255,20,0.15)'); return g;
+}}
+
+const vline = {{
+  id: 'vline',
+  afterDatasetsDraw(chart) {{
+    const active = chart.tooltip?.getActiveElements?.();
+    if (!active || !active.length) return;
+    const x = active[0].element.x;
+    const {{ ctx, chartArea: {{ top, bottom }} }} = chart;
+    ctx.save(); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom);
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(2,6,23,.35)'; ctx.setLineDash([4,4]); ctx.stroke(); ctx.restore();
+  }}
+}};
+Chart.register(vline);
+
+function showModal(html) {{
+  const bg = document.getElementById('dayModal');
+  document.getElementById('modalBody').innerHTML = html || "<div style='padding:8px;color:#64748b'>No data.</div>";
+  bg.style.display = 'flex';
+}}
+function hideModal() {{ document.getElementById('dayModal').style.display = 'none'; }}
+window.addEventListener('keydown', e => {{ if (e.key === 'Escape') hideModal(); }});
+document.getElementById('dayModal').addEventListener('click', e => {{ if (e.target.id === 'dayModal') hideModal(); }});
+
+new Chart(ctx, {{
+  type: 'line',
+  data: {{ labels, datasets: [
+    {{ label: 'Videos (Pakistan)', data: vids, fill:'origin', backgroundColor: purpleFill, borderColor:'#4c1d95', borderWidth:2.5, pointRadius:0, pointHoverRadius:0, pointHitRadius:10, tension:.35 }},
+    {{ label: 'Articles (Pakistan)', data: arts, fill:'origin', backgroundColor: greenFill,  borderColor:'#0c8a4e', borderWidth:2.5, pointRadius:0, pointHoverRadius:0, pointHitRadius:10, tension:.35 }}
+  ]}},
+  options: {{
+    responsive:true, maintainAspectRatio:false,
+    interaction: {{ mode:'index', intersect:false, axis:'x' }},
+    plugins: {{
+      legend: {{ display:false }},
+      tooltip: {{
+        backgroundColor:'rgba(15,23,42,.95)', borderColor:'rgba(15,23,42,.25)', borderWidth:1, titleColor:'#fff', bodyColor:'#fff', displayColors:true, padding:10,
+        callbacks: {{
+          title(items) {{ return items[0].label; }},
+          label(ctx) {{ const i=ctx.dataIndex; const raw=ctx.datasetIndex===0?vidsRaw[i]:artsRaw[i]; return `${{ctx.dataset.label.replace(' (Pakistan)','')}}: ${{raw}}`; }}
+        }}
+      }}
+    }},
+    scales: {{
+      x: {{ grid: {{ display:false, drawBorder:false }}, ticks: {{ color:'#0f172a', font: {{ weight:600 }} }} }},
+      y: {{ type:'logarithmic', min: eps, grid: {{ display:false, drawBorder:false }}, ticks: {{ display:false }} }}
+    }},
+    onClick(evt, elements) {{
+      // Find the nearest x-index under cursor even if no point visible
+      const points = this.getElementsAtEventForMode(evt, 'nearest', {{intersect:false}}, false);
+      if (!points.length) return;
+      const i = points[0].index;
+      const key = labels[i];
+      showModal(detailMap[key] || `<h3 style='margin:0;color:#0f172a'>${{key}}</h3><div style='color:#64748b'>No data.</div>`);
+    }}
+  }},
+  plugins: [{{id:'vline'}}]
+}});
+</script>
+</body>
+</html>
+"""
+
+
+
+
+
+# -----------------------------
+# Radar chart (topics that CONTAIN "Pakistan"; strength = videos+articles)
+# -----------------------------
+radar_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+<style>
+  body {{ margin:0; background:transparent; font-family: ui-sans-serif, system-ui, -apple-system; }}
+  #wrap {{ width:100%; height:380px; position:relative; border-radius:14px; box-shadow:0 8px 18px rgba(15,23,42,.15); background:#fff; overflow:hidden; }}
+  canvas {{ width:100% !important; height:100% !important; }}
+
+  .modal-backdrop {{ position:fixed; inset:0; background:rgba(2,6,23,.45); display:none; align-items:center; justify-content:center; z-index:9999; }}
+  .modal-card {{ width:min(860px, 92vw); max-height:80vh; overflow:auto; background:#fff; border-radius:16px; box-shadow:0 16px 40px rgba(0,0,0,.28); padding:18px 18px 22px; border:1px solid rgba(2,6,23,.08); }}
+  .modal-close {{ position:absolute; right:18px; top:14px; background:#fff; border:1px solid rgba(0,0,0,.12); border-radius:10px; padding:6px 10px; font-weight:800; cursor:pointer; }}
+</style>
+</head>
+<body>
+  <div id="wrap"><canvas id="radar"></canvas></div>
+
+  <div class="modal-backdrop" id="topicModal">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-close" onclick="hideTopic()">Close ✕</button>
+      <div id="topicBody"></div>
+    </div>
+  </div>
+
+<script>
+const labels = {radar_labels_json};
+const data = {radar_values_json};
+const detailMap = {radar_detail_map_json};
+
+const ctx = document.getElementById('radar').getContext('2d');
+const lineColor = 'rgb(20,184,166)';
+const fillColor = 'rgba(20,184,166,0.22)';
+
+function showTopic(html) {{
+  const bg = document.getElementById('topicModal');
+  document.getElementById('topicBody').innerHTML = html || "<div style='padding:8px;color:#64748b'>No data.</div>";
+  bg.style.display = 'flex';
+}}
+function hideTopic() {{ document.getElementById('topicModal').style.display = 'none'; }}
+window.addEventListener('keydown', e => {{ if (e.key === 'Escape') hideTopic(); }});
+document.getElementById('topicModal').addEventListener('click', e => {{ if (e.target.id === 'topicModal') hideTopic(); }});
+
+new Chart(ctx, {{
+  type: 'radar',
+  data: {{
+    labels,
+    datasets: [{{
+      label: 'Videos + Articles',
+      data: data,
+      fill: true,
+      backgroundColor: fillColor,
+      borderColor: lineColor,
+      borderWidth: 2,
+      pointBackgroundColor: lineColor,
+      pointBorderColor: '#fff',
+      pointRadius: 3
+    }}]
+  }},
+  options: {{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {{ legend: {{ display: false }}, tooltip: {{ enabled: true }} }},
+    scales: {{
+      r: {{
+        beginAtZero: true,
+        suggestedMax: Math.max(...data) + 1,
+        ticks: {{ showLabelBackdrop:false, color:'#9aa4b2', stepSize: 1 }},
+        grid: {{ color:'rgba(0,0,0,.08)' }},
+        angleLines: {{ color:'rgba(0,0,0,.08)' }},
+        pointLabels: {{ color:'#334155', font: {{ weight: 600 }} }}
+      }}
+    }},
+    onClick(evt) {{
+      // figure out which point was clicked
+      const points = this.getElementsAtEventForMode(evt, 'nearest', {{intersect:true}}, true);
+      if (!points.length) return;
+      const idx = points[0].index;
+      const key = labels[idx];
+      showTopic(detailMap[key] || `<h3 style='margin:0;color:#0f172a'>${{key}}</h3><div style='color:#64748b'>No data.</div>`);
+    }}
+  }}
+}});
+</script>
+</body>
+</html>
+"""
 
 # --------------------------------------------------------------------------------------
 # MAIN DASHBOARD (only renders when not in detail view)
 # --------------------------------------------------------------------------------------
 def render_main():
     # --- HERO ---
-    IMG_PATH = "https://raw.githubusercontent.com/Rugger85/RSS/main/12818.jpg"
-    uri = IMG_PATH
+    IMG_PATH = r"D:\Downloads\YouTube Project\soft\soft\rainbow-coloured-abstract-low-poly-banner-design\12818.jpg"
+    uri = to_data_uri(IMG_PATH)
     if uri is None:
         st.warning("Local image not found or unreadable. Showing an online fallback.")
         uri = "https://images.unsplash.com/photo-1445452916036-9022dfd33aa8?q=80&w=2400&auto=format&fit=crop"
@@ -1504,7 +2042,9 @@ def render_main():
             }});
             </script>
             """, height=380, scrolling=False)
-
+        st.markdown("<div style='border-right:1px solid rgba(200,200,200,0.3); padding-right:20px;text-align: center;'>"
+                    "<h4>Videos and Articles about Pakistan</h4></div>", unsafe_allow_html=True)
+        st.components.v1.html(line_html, height=380, scrolling=False)
     with a2:
         st.markdown("<div style='border-right:1px solid rgba(200,200,200,0.3); padding-right:20px;text-align: center;'>"
                     "<h4>Articles on Pakistan</h4></div>", unsafe_allow_html=True)
@@ -1625,6 +2165,10 @@ def render_main():
             }});
             </script>
             """, height=380, scrolling=False)
+
+        st.components.v1.html(radar_html, height=380, scrolling=False)
+
+
 
     # --- AI Reports list (topics -> clickable to detail) ---
     st.markdown("## AI Reports")
@@ -1813,7 +2357,7 @@ with st.sidebar:
             if blobs:
                 merged = merge_pdfs(blobs)
                 fname = "combined_" + "_".join(_norm_topic_val(t)[:20] for t in picked_topics)[:80] + ".pdf"
-                st.download_button("📥 Download Combined Report", data=merged, file_name=fname, mime="application/pdf", key="dl_combined_pdf")
+                st.download_button("Download Combined Report", data=merged, file_name=fname, mime="application/pdf", key="dl_combined_pdf")
             else:
                 st.info("No reports could be generated.")
     
@@ -1821,4 +2365,3 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
-
