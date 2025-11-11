@@ -387,7 +387,7 @@ def is_relevant_rule(topic: str, title: str, desc: str = "") -> tuple[bool,str]:
         return True, f"strong_title+desc:{strong_hits}+{desc_hits}"
 
     hits_desc = sum(1 for w in toks if _wb_find(desc, w))
-    if hits_desc >= 1:
+    if hits_desc >= 2:
         return True, f"tokens_in_desc:{hits_desc}"
 
     return False, "no_rule_matched"
@@ -2365,6 +2365,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
