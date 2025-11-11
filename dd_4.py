@@ -230,7 +230,7 @@ def short(n):
     for div, suf in ((1e9,"B"), (1e6,"M"), (1e3,"k")):
         if abs(n) >= div:
             x = n/div
-            return f"{x:.2f}{suf}".rstrip("0").rstrip(".")
+            return f"{x:.1f}{suf}".rstrip("0").rstrip(".")
     return str(int(n)) if float(n).is_integer() else str(n)
 
 def _placeholder_img(seed: str) -> str:
@@ -2365,4 +2365,5 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
