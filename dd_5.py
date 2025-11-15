@@ -2150,9 +2150,12 @@ def render_main():
 
             ts_col = "created_at" if "created_at" in vids.columns else "published_at"
             vids["__ts"] = pd.to_datetime(vids[ts_col], errors="coerce")
-
             today = pd.Timestamp.now().normalize()
-            vids = vids.loc[vids["__ts"].dt.normalize() == today].copy()
+            cutoff = pd.Timestamp.now() - pd.Timedelta(hours=72)
+            vids = vids.loc[vids["__ts"] >= cutoff].copy()
+
+            
+            #vids = vids.loc[vids["__ts"].dt.normalize() == today].copy()
             if vids.empty:
                 return []
 
@@ -2778,6 +2781,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
