@@ -1181,7 +1181,7 @@ import numpy as np
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-st.set_page_config(page_title="Pakistan Insights — Videos & Topics", layout="wide")
+#st.set_page_config(page_title="Pakistan Insights — Videos & Topics", layout="wide")
 
 # -----------------------------
 # DB helpers
@@ -2781,6 +2781,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
