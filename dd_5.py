@@ -2251,7 +2251,7 @@ def render_main():
                 return []
 
             now_utc = pd.Timestamp.now(tz="UTC")
-            two_days_ago = now_utc - pd.Timedelta(days=3)
+            two_days_ago = now_utc - pd.Timedelta(days=7)
 
             arts = arts.loc[arts["__ts"] >= two_days_ago].copy()
             if arts.empty:
@@ -2781,6 +2781,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
