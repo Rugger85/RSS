@@ -1208,8 +1208,8 @@ def load_from_db_2():
 
         ai_topics_2 = pd.read_sql(text("""
             SELECT
-                score, topic, source, thumbnail_url, channel_logo,
-                created_at, title, summary, link, source
+                score, topic, source,
+                created_at, title, summary, link
             FROM ai_topics
         """), con)
     return videos_2, ai_topics_2
@@ -2779,6 +2779,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
