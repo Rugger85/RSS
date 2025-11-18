@@ -1197,6 +1197,9 @@ def load_from_db_2():
             SELECT 
                 channel_origin,
                 channel_title,
+                channel_thumb,
+                channel_url,
+                thumbnail,
                 view_count, like_count, comment_count,
                 topic, title, description,
                 published_at, duration_hms, url
@@ -1205,8 +1208,8 @@ def load_from_db_2():
 
         ai_topics_2 = pd.read_sql(text("""
             SELECT
-                score, topic, source,
-                created_at, title, summary, link
+                score, topic, source, thumbnail_url, channel_logo
+                created_at, title, summary, link, source
             FROM ai_topics
         """), con)
     return videos_2, ai_topics_2
@@ -2776,6 +2779,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
