@@ -23,6 +23,12 @@ try:
 except Exception:
     from PyPDF2 import PdfReader, PdfWriter
 
+def _safe_b64decode(s: str) -> bytes:
+    try:
+        return base64.b64decode(s)
+    except Exception:
+        return b""
+
 
 
 # --------------------------------------------------------------------------------------
@@ -235,9 +241,11 @@ def short(n):
             return f"{x:.1f}{suf}".rstrip("0").rstrip(".")
     return str(int(n)) if float(n).is_integer() else str(n)
 
-def _placeholder_img(seed: str) -> str:
-    h = hashlib.md5(seed.encode("utf-8")).hexdigest()[:8]
-    return f"https://picsum.photos/seed/{h}/800/450"
+from reportlab.platypus import Spacer
+
+def _placeholder_img(max_w, max_h):
+    return Spacer(width=max_w, height=max_h)
+
 
 def _domain_from_url(u: str) -> str:
     try:
@@ -2814,6 +2822,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
