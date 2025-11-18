@@ -23,12 +23,6 @@ try:
 except Exception:
     from PyPDF2 import PdfReader, PdfWriter
 
-def _safe_b64decode(s: str) -> bytes:
-    try:
-        return base64.b64decode(s)
-    except Exception:
-        return b""
-
 
 
 # --------------------------------------------------------------------------------------
@@ -241,11 +235,9 @@ def short(n):
             return f"{x:.1f}{suf}".rstrip("0").rstrip(".")
     return str(int(n)) if float(n).is_integer() else str(n)
 
-from reportlab.platypus import Spacer
-
-def _placeholder_img(max_w, max_h):
-    return Spacer(width=max_w, height=max_h)
-
+def _placeholder_img(seed: str) -> str:
+    h = hashlib.md5(seed.encode("utf-8")).hexdigest()[:8]
+    return f"https://picsum.photos/seed/{h}/800/450"
 
 def _domain_from_url(u: str) -> str:
     try:
@@ -717,20 +709,24 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     elems.append(NextPageTemplate("Landscape"))
     elems.append(PageBreak())
 
-    _PLACEHOLDER_PNG_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==")
-    
-    def _placeholder_img_2(max_w, max_h):
+    _PLACEHOLDER_PNG_B64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAYAAABZxZ2mAAAACXBIWXMAAAsSAAALEgHS3X78AAABcElEQVR4nO3aMU7DQBQF4S8"
+        "n3Z2lq8l7h7gQyqG1w1t6o3V5y1g0o0s7gY8w0S8yQ3e/0Qq+f3g0G7V8g6h9C4a+qf8F4h2JbCwAAAAAAAAAAAAAA8D9c7R3v1z3x"
+        "mRrQeD0q4m8l7bqD3hYV0mJ9G5x1k8s2w3uK2pQy2e6sQ2v8cK4dZr7fKcG9fW2nq6dDkFqS5f2y0W3e5H5nq1m9bq8cJQ0nJ9h0Z/"
+        "8n2Jw7ZkZ0b7l3bq6cKk2k8b6u8dJY3r7b0q+qJgQ3j0YHn8pQKAAAAAAAAAAAAAAB8H7S1Q6eFme1AAAAAElFTkSuQmCC"
+    )
+
+    def _placeholder_img(max_w, max_h):
         raw = base64.b64decode(_PLACEHOLDER_PNG_B64)
         bio = io.BytesIO(raw)
         img = Image(bio)
         img._restrictSize(max_w, max_h)
         return img
-    
 
     def _img_from_any(src, max_w, max_h):
         try:
             if not src:
-                return _placeholder_img_2(max_w, max_h)
+                return _placeholder_img(max_w, max_h)
             if isinstance(src, str) and src.startswith("data:image/"):
                 b64 = src.split(",", 1)[1]
                 bio = io.BytesIO(base64.b64decode(b64))
@@ -746,7 +742,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
                 img = Image(bio); img._restrictSize(max_w, max_h); return img
         except Exception:
             pass
-        return _placeholder_img_2(max_w, max_h)
+        return _placeholder_img(max_w, max_h)
 
     def _favicon_for_url(u, max_w, max_h):
         g = _favicon_from_any_url(u, 64)
@@ -758,7 +754,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
             return img
         try:
             if not isinstance(channel_url, str) or not channel_url:
-                return _placeholder_img_2(max_w, max_h)
+                return _placeholder_img(max_w, max_h)
             from urllib.request import urlopen, Request
             req = Request(channel_url, headers={"User-Agent": "Mozilla/5.0"})
             with urlopen(req, timeout=8) as r:
@@ -2822,9 +2818,6 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
-
-
-
 
 
 
