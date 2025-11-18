@@ -709,6 +709,9 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
 
     _PLACEHOLDER_PNG_B64 = (
         "iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAYAAABZxZ2mAAAACXBIWXMAAAsSAAALEgHS3X78AAABcElEQVR4nO3aMU7DQBQF4S8"
+        "n3Z2lq8l7h7gQyqG1w1t6o3V5y1g0o0s7gY8w0S8yQ3e/0Qq+f3g0G7V8g6h9C4a+qf8F4h2JbCwAAAAAAAAAAAAAA8D9c7R3v1z3x"
+        "mRrQeD0q4m8l7bqD3hYV0mJ9G5x1k8s2w3uK2pQy2e6sQ2v8cK4dZr7fKcG9fW2nq6dDkFqS5f2y0W3e5H5nq1m9bq8cJQ0nJ9h0Z/"
+        "8n2Jw7ZkZ0b7l3bq6cKk2k8b6u8dJY3r7b0q+qJgQ3j0YHn8pQKAAAAAAAAAAAAAAB8H7S1Q6eFme1AAAAAElFTkSuQmCC"
     )
 
     def _placeholder_img(max_w, max_h):
@@ -1178,7 +1181,7 @@ import numpy as np
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-#st.set_page_config(page_title="Pakistan Insights — Videos & Topics", layout="wide")
+st.set_page_config(page_title="Pakistan Insights — Videos & Topics", layout="wide")
 
 # -----------------------------
 # DB helpers
@@ -1196,9 +1199,6 @@ def load_from_db_2():
             SELECT 
                 channel_origin,
                 channel_title,
-                channel_thumb,
-                channel_url,
-                thumbnail,
                 view_count, like_count, comment_count,
                 topic, title, description,
                 published_at, duration_hms, url
@@ -2150,12 +2150,9 @@ def render_main():
 
             ts_col = "created_at" if "created_at" in vids.columns else "published_at"
             vids["__ts"] = pd.to_datetime(vids[ts_col], errors="coerce")
-            today = pd.Timestamp.now().normalize()
-            cutoff = pd.Timestamp.now() - pd.Timedelta(hours=72)
-            vids = vids.loc[vids["__ts"] >= cutoff].copy()
 
-            
-            #vids = vids.loc[vids["__ts"].dt.normalize() == today].copy()
+            today = pd.Timestamp.now().normalize()
+            vids = vids.loc[vids["__ts"].dt.normalize() == today].copy()
             if vids.empty:
                 return []
 
@@ -2251,7 +2248,7 @@ def render_main():
                 return []
 
             now_utc = pd.Timestamp.now(tz="UTC")
-            two_days_ago = now_utc - pd.Timedelta(days=7)
+            two_days_ago = now_utc - pd.Timedelta(days=2)
 
             arts = arts.loc[arts["__ts"] >= two_days_ago].copy()
             if arts.empty:
@@ -2781,12 +2778,6 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
-
-
-
-
-
-
 
 
 
