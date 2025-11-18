@@ -23,6 +23,8 @@ try:
 except Exception:
     from PyPDF2 import PdfReader, PdfWriter
 
+
+
 # --------------------------------------------------------------------------------------
 # Page setup
 # --------------------------------------------------------------------------------------
@@ -1181,7 +1183,7 @@ import numpy as np
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-st.set_page_config(page_title="Pakistan Insights — Videos & Topics", layout="wide")
+#st.set_page_config(page_title="Pakistan Insights — Videos & Topics", layout="wide")
 
 # -----------------------------
 # DB helpers
@@ -1199,11 +1201,15 @@ def load_from_db_2():
             SELECT 
                 channel_origin,
                 channel_title,
+                channel_thumb,
+                channel_url,
+                thumbnail,
                 view_count, like_count, comment_count,
                 topic, title, description,
                 published_at, duration_hms, url
             FROM videos
         """), con)
+
 
         ai_topics_2 = pd.read_sql(text("""
             SELECT
@@ -1432,53 +1438,80 @@ def _make_list(items, kind):
 
     return "".join(rows) or f"<div style='color:#64748b'>No {kind} for this selection.</div>"
 
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib import colors
+
+def _shorten_url(u: str, max_len: int = 70) -> str:
+    u = u or ""
+    u = u.strip()
+    return u if len(u) <= max_len else u[:max_len-3] + "..."
+
 def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     buf = io.BytesIO()
     lm = rm = 18 * mm
     tm = bm = 18 * mm
-    doc = BaseDocTemplate(buf, leftMargin=lm, rightMargin=rm, topMargin=tm, bottomMargin=bm, pagesize=A4)
+    doc = BaseDocTemplate(buf, leftMargin=lm, rightMargin=rm,
+                          topMargin=tm, bottomMargin=bm, pagesize=A4)
     frame = Frame(lm, bm, A4[0] - lm - rm, A4[1] - tm - bm, id="popup")
     doc.addPageTemplates(PageTemplate(id="popup", frames=[frame]))
 
     styles = getSampleStyleSheet()
-    h = ParagraphStyle("popup_h", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=16, textColor=colors.HexColor("#0e1629"), spaceAfter=6)
-    sub = ParagraphStyle("popup_sub", parent=styles["Normal"], fontName="Helvetica", fontSize=10, textColor=colors.HexColor("#64748b"), spaceAfter=6)
-    cell = ParagraphStyle("popup_cell", parent=styles["Normal"], fontName="Helvetica", fontSize=9, leading=11, textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
-    hdr = ParagraphStyle("popup_hdr", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=9, textColor=colors.white)
+    h   = ParagraphStyle("popup_h", parent=styles["Heading2"],
+                         fontName="Helvetica-Bold", fontSize=16,
+                         textColor=colors.HexColor("#0e1629"), spaceAfter=2)
+    sub = ParagraphStyle("popup_sub", parent=styles["Normal"],
+                         fontName="Helvetica", fontSize=10,
+                         textColor=colors.HexColor("#64748b"), spaceAfter=4)
+    cell = ParagraphStyle("popup_cell", parent=styles["Normal"],
+                          fontName="Helvetica", fontSize=9, leading=11,
+                          textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
+    url_cell = ParagraphStyle("popup_url", parent=cell,
+                              fontSize=8, leading=9,
+                              wordWrap="CJK", splitLongWords=1)
+    hdr = ParagraphStyle("popup_hdr", parent=styles["Normal"],
+                         fontName="Helvetica-Bold", fontSize=9,
+                         textColor=colors.white)
 
-    elems = []
-    elems.append(Paragraph(title, h))
+    elems = [Paragraph(title, h)]
     if subtitle:
         elems.append(Paragraph(subtitle, sub))
     elems.append(Spacer(1, 3 * mm))
 
+    # table header
     data = [[
         Paragraph("Type", hdr),
         Paragraph("Title", hdr),
         Paragraph("Meta", hdr),
         Paragraph("URL", hdr),
-        Paragraph("Icon", hdr),
-        Paragraph("Thumb", hdr),
     ]]
 
-    for r in rows:
+    link_styles = []  # will hold LINK style commands
+
+    # build rows + link annotations
+    for row_idx, r in enumerate(rows, start=1):  # start=1 because 0 is header
+        url = (r.get("url") or "").strip()
+        display_url = _shorten_url(url)          # nice short text in cell
+
         data.append([
             Paragraph(html.escape(str(r.get("type", ""))), cell),
             Paragraph(html.escape(str(r.get("title", ""))), cell),
             Paragraph(html.escape(str(r.get("meta", ""))), cell),
-            Paragraph(html.escape(str(r.get("url", ""))), cell),
-            Paragraph(html.escape(str(r.get("icon", ""))), cell),
-            Paragraph(html.escape(str(r.get("thumb", ""))), cell),
+            Paragraph(html.escape(display_url), url_cell),
         ])
 
-    col_widths = [18 * mm, 45 * mm, 45 * mm, 30 * mm, 27 * mm, 27 * mm]
-    tbl = Table(data, colWidths=col_widths, repeatRows=1)
-    tbl.setStyle(TableStyle([
+        if url:
+            # make the entire URL cell a real hyperlink, regardless of wrapping
+            link_styles.append(("LINK", (3, row_idx), (3, row_idx), url))
+
+    col_widths = [12 * mm, 40 * mm, 42 * mm, 80 * mm]
+
+    base_styles = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0e1629")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#f1f5f9"), colors.HexColor("#e2e8f0")]),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+         [colors.HexColor("#f1f5f9"), colors.HexColor("#e2e8f0")]),
         ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#0e1629")),
         ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
         ("BOX", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
@@ -1486,12 +1519,16 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]))
+    ]
+
+    tbl = Table(data, colWidths=col_widths, repeatRows=1)
+    tbl.setStyle(TableStyle(base_styles + link_styles))
 
     elems.append(tbl)
     doc.build(elems)
     buf.seek(0)
     return buf.getvalue()
+
 
 # ---------- Line-chart (date) -> popup content ----------
 line_detail_map = {}
@@ -2150,9 +2187,12 @@ def render_main():
 
             ts_col = "created_at" if "created_at" in vids.columns else "published_at"
             vids["__ts"] = pd.to_datetime(vids[ts_col], errors="coerce")
-
             today = pd.Timestamp.now().normalize()
-            vids = vids.loc[vids["__ts"].dt.normalize() == today].copy()
+            cutoff = pd.Timestamp.now() - pd.Timedelta(hours=72)
+            vids = vids.loc[vids["__ts"] >= cutoff].copy()
+
+            
+            #vids = vids.loc[vids["__ts"].dt.normalize() == today].copy()
             if vids.empty:
                 return []
 
@@ -2248,7 +2288,7 @@ def render_main():
                 return []
 
             now_utc = pd.Timestamp.now(tz="UTC")
-            two_days_ago = now_utc - pd.Timedelta(days=2)
+            two_days_ago = now_utc - pd.Timedelta(days=10)
 
             arts = arts.loc[arts["__ts"] >= two_days_ago].copy()
             if arts.empty:
@@ -2778,6 +2818,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
