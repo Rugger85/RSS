@@ -1438,59 +1438,100 @@ def _make_list(items, kind):
 
     return "".join(rows) or f"<div style='color:#64748b'>No {kind} for this selection.</div>"
 
+from datetime import datetime
+
 def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     buf = io.BytesIO()
     lm = rm = 18 * mm
     tm = bm = 18 * mm
-    doc = BaseDocTemplate(buf, leftMargin=lm, rightMargin=rm,
-                          topMargin=tm, bottomMargin=bm, pagesize=A4)
+    doc = BaseDocTemplate(
+        buf,
+        leftMargin=lm, rightMargin=rm,
+        topMargin=tm, bottomMargin=bm,
+        pagesize=A4,
+    )
     frame = Frame(lm, bm, A4[0] - lm - rm, A4[1] - tm - bm, id="popup")
     doc.addPageTemplates(PageTemplate(id="popup", frames=[frame]))
 
     styles = getSampleStyleSheet()
-    h = ParagraphStyle("popup_h", parent=styles["Heading2"],
-                       fontName="Helvetica-Bold", fontSize=16,
-                       textColor=colors.HexColor("#0e1629"), spaceAfter=6)
-    sub = ParagraphStyle("popup_sub", parent=styles["Normal"],
-                         fontName="Helvetica", fontSize=10,
-                         textColor=colors.HexColor("#64748b"), spaceAfter=6)
-    cell = ParagraphStyle("popup_cell", parent=styles["Normal"],
-                          fontName="Helvetica", fontSize=9, leading=11,
-                          textColor=colors.HexColor("#0e1629"),
-                          wordWrap="CJK")
+    h = ParagraphStyle(
+        "popup_h", parent=styles["Heading2"],
+        fontName="Helvetica-Bold", fontSize=16,
+        textColor=colors.HexColor("#0e1629"),
+        spaceAfter=2,
+    )
+    sub = ParagraphStyle(
+        "popup_sub", parent=styles["Normal"],
+        fontName="Helvetica", fontSize=10,
+        textColor=colors.HexColor("#64748b"),
+        spaceAfter=4,
+    )
+    # normal cell style
+    cell = ParagraphStyle(
+        "popup_cell", parent=styles["Normal"],
+        fontName="Helvetica", fontSize=9, leading=11,
+        textColor=colors.HexColor("#0e1629"),
+        wordWrap="CJK",
+    )
+    # URL cell style: allow character wrapping of long URLs
+    url_cell = ParagraphStyle(
+        "popup_url", parent=cell,
+        fontSize=8, leading=9,
+        wordWrap="CJK",       # wrap by characters
+        splitLongWords=1,     # break long tokens (URLs) if needed
+    )
+    # date line under title
+    date_style = ParagraphStyle(
+        "popup_date", parent=styles["Normal"],
+        fontName="Helvetica", fontSize=9,
+        textColor=colors.HexColor("#64748b"),
+        spaceAfter=4,
+    )
 
-    # special style for URL – smaller font, no word splitting
-    url_cell = ParagraphStyle("popup_url", parent=cell,
-                              fontSize=8, leading=9,
-                              wordWrap=None,  # don't wrap artificially
-                              splitLongWords=0)
-
-    hdr = ParagraphStyle("popup_hdr", parent=styles["Normal"],
-                         fontName="Helvetica-Bold", fontSize=9,
-                         textColor=colors.white)
+    hdr = ParagraphStyle(
+        "popup_hdr", parent=styles["Normal"],
+        fontName="Helvetica-Bold", fontSize=9,
+        textColor=colors.white,
+    )
 
     elems = []
+
+    # title (topic)
     elems.append(Paragraph(title, h))
+
+    # report downloaded date
+    dt_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    elems.append(Paragraph(f"Report downloaded on: {dt_str}", date_style))
+
+    # optional subtitle below date
     if subtitle:
         elems.append(Paragraph(subtitle, sub))
+
     elems.append(Spacer(1, 3 * mm))
 
+    # table header
     data = [[
         Paragraph("Type", hdr),
         Paragraph("Title", hdr),
         Paragraph("Meta", hdr),
-        Paragraph("URL", hdr)
+        Paragraph("URL", hdr),
     ]]
 
+    # rows
     for r in rows:
+        url_txt = html.escape(str(r.get("url", "")))
+        title_txt = html.escape(str(r.get("title", "")))
+        meta_txt = html.escape(str(r.get("meta", "")))
+        type_txt = html.escape(str(r.get("type", "")))
+
         data.append([
-            Paragraph(html.escape(str(r.get("type", ""))), cell),
-            Paragraph(html.escape(str(r.get("title", ""))), cell),
-            Paragraph(html.escape(str(r.get("meta", ""))), cell),
-            Paragraph(html.escape(str(r.get("url", ""))), url_cell),  # <- use url_cell
+            Paragraph(type_txt, cell),
+            Paragraph(title_txt, cell),
+            Paragraph(meta_txt, cell),
+            Paragraph(url_txt, url_cell),   # use URL style here
         ])
 
-    # make total <= frame width (~174mm) and give URL most of it
+    # widths sum to frame width (210mm - 2*18mm = 174mm)
     col_widths = [12 * mm, 40 * mm, 42 * mm, 80 * mm]
 
     tbl = Table(data, colWidths=col_widths, repeatRows=1)
@@ -1514,6 +1555,7 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     doc.build(elems)
     buf.seek(0)
     return buf.getvalue()
+
 
 
 # ---------- Line-chart (date) -> popup content ----------
@@ -2804,6 +2846,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
