@@ -1458,7 +1458,7 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
         "popup_h", parent=styles["Heading2"],
         fontName="Helvetica-Bold", fontSize=16,
         textColor=colors.HexColor("#0e1629"),
-        spaceAfter=2,
+        spaceAfter=4,
     )
     sub = ParagraphStyle(
         "popup_sub", parent=styles["Normal"],
@@ -1483,7 +1483,7 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     # date line under title
     date_style = ParagraphStyle(
         "popup_date", parent=styles["Normal"],
-        fontName="Helvetica", fontSize=9,
+        fontName="Helvetica", fontSize=10,
         textColor=colors.HexColor("#64748b"),
         spaceAfter=4,
     )
@@ -1501,7 +1501,7 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
 
     # report downloaded date
     dt_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    elems.append(Paragraph(f"Report downloaded on: {dt_str}", date_style))
+    elems.append(Paragraph(f"Date: {dt_str}", date_style))
 
     # optional subtitle below date
     if subtitle:
@@ -2846,6 +2846,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
