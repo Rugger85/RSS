@@ -709,12 +709,22 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     elems.append(NextPageTemplate("Landscape"))
     elems.append(PageBreak())
 
-    _PLACEHOLDER_PNG_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==")
+    _PLACEHOLDER_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+    )
+
+    def _placeholder_img2(max_w, max_h):
+        raw = base64.b64decode(_PLACEHOLDER_PNG_B64)
+        bio = io.BytesIO(raw)
+        img = Image(bio)
+        img._restrictSize(max_w, max_h)
+        return img
+
 
     def _img_from_any(src, max_w, max_h):
         try:
             if not src:
-                return _placeholder_img(max_w, max_h)
+                return _placeholder_img2(max_w, max_h)
             if isinstance(src, str) and src.startswith("data:image/"):
                 b64 = src.split(",", 1)[1]
                 bio = io.BytesIO(base64.b64decode(b64))
@@ -730,7 +740,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
                 img = Image(bio); img._restrictSize(max_w, max_h); return img
         except Exception:
             pass
-        return _placeholder_img(max_w, max_h)
+        return _placeholder_img2(max_w, max_h)
 
     def _favicon_for_url(u, max_w, max_h):
         g = _favicon_from_any_url(u, 64)
@@ -742,7 +752,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
             return img
         try:
             if not isinstance(channel_url, str) or not channel_url:
-                return _placeholder_img(max_w, max_h)
+                return _placeholder_img2(max_w, max_h)
             from urllib.request import urlopen, Request
             req = Request(channel_url, headers={"User-Agent": "Mozilla/5.0"})
             with urlopen(req, timeout=8) as r:
@@ -2806,7 +2816,6 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
-
 
 
 
