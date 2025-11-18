@@ -1442,15 +1442,32 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     buf = io.BytesIO()
     lm = rm = 18 * mm
     tm = bm = 18 * mm
-    doc = BaseDocTemplate(buf, leftMargin=lm, rightMargin=rm, topMargin=tm, bottomMargin=bm, pagesize=A4)
+    doc = BaseDocTemplate(buf, leftMargin=lm, rightMargin=rm,
+                          topMargin=tm, bottomMargin=bm, pagesize=A4)
     frame = Frame(lm, bm, A4[0] - lm - rm, A4[1] - tm - bm, id="popup")
     doc.addPageTemplates(PageTemplate(id="popup", frames=[frame]))
 
     styles = getSampleStyleSheet()
-    h = ParagraphStyle("popup_h", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=16, textColor=colors.HexColor("#0e1629"), spaceAfter=6)
-    sub = ParagraphStyle("popup_sub", parent=styles["Normal"], fontName="Helvetica", fontSize=10, textColor=colors.HexColor("#64748b"), spaceAfter=6)
-    cell = ParagraphStyle("popup_cell", parent=styles["Normal"], fontName="Helvetica", fontSize=9, leading=11, textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
-    hdr = ParagraphStyle("popup_hdr", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=9, textColor=colors.white)
+    h = ParagraphStyle("popup_h", parent=styles["Heading2"],
+                       fontName="Helvetica-Bold", fontSize=16,
+                       textColor=colors.HexColor("#0e1629"), spaceAfter=6)
+    sub = ParagraphStyle("popup_sub", parent=styles["Normal"],
+                         fontName="Helvetica", fontSize=10,
+                         textColor=colors.HexColor("#64748b"), spaceAfter=6)
+    cell = ParagraphStyle("popup_cell", parent=styles["Normal"],
+                          fontName="Helvetica", fontSize=9, leading=11,
+                          textColor=colors.HexColor("#0e1629"),
+                          wordWrap="CJK")
+
+    # special style for URL – smaller font, no word splitting
+    url_cell = ParagraphStyle("popup_url", parent=cell,
+                              fontSize=8, leading=9,
+                              wordWrap=None,  # don't wrap artificially
+                              splitLongWords=0)
+
+    hdr = ParagraphStyle("popup_hdr", parent=styles["Normal"],
+                         fontName="Helvetica-Bold", fontSize=9,
+                         textColor=colors.white)
 
     elems = []
     elems.append(Paragraph(title, h))
@@ -1462,9 +1479,7 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
         Paragraph("Type", hdr),
         Paragraph("Title", hdr),
         Paragraph("Meta", hdr),
-        Paragraph("URL", hdr),
-        Paragraph("Icon", hdr),
-        Paragraph("Thumb", hdr),
+        Paragraph("URL", hdr)
     ]]
 
     for r in rows:
@@ -1472,19 +1487,20 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
             Paragraph(html.escape(str(r.get("type", ""))), cell),
             Paragraph(html.escape(str(r.get("title", ""))), cell),
             Paragraph(html.escape(str(r.get("meta", ""))), cell),
-            Paragraph(html.escape(str(r.get("url", ""))), cell),
-            Paragraph(html.escape(str(r.get("icon", ""))), cell),
-            Paragraph(html.escape(str(r.get("thumb", ""))), cell),
+            Paragraph(html.escape(str(r.get("url", ""))), url_cell),  # <- use url_cell
         ])
 
-    col_widths = [18 * mm, 45 * mm, 45 * mm, 30 * mm, 27 * mm, 27 * mm]
+    # make total <= frame width (~174mm) and give URL most of it
+    col_widths = [12 * mm, 40 * mm, 42 * mm, 80 * mm]
+
     tbl = Table(data, colWidths=col_widths, repeatRows=1)
     tbl.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0e1629")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#f1f5f9"), colors.HexColor("#e2e8f0")]),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+         [colors.HexColor("#f1f5f9"), colors.HexColor("#e2e8f0")]),
         ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#0e1629")),
         ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
         ("BOX", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
@@ -1498,6 +1514,7 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     doc.build(elems)
     buf.seek(0)
     return buf.getvalue()
+
 
 # ---------- Line-chart (date) -> popup content ----------
 line_detail_map = {}
@@ -2787,6 +2804,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
