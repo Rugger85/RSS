@@ -1199,6 +1199,9 @@ def load_from_db_2():
             SELECT 
                 channel_origin,
                 channel_title,
+                channel_thumb,
+                channel_url,
+                thumbnail,
                 view_count, like_count, comment_count,
                 topic, title, description,
                 published_at, duration_hms, url
@@ -2781,6 +2784,7 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
+
 
 
 
