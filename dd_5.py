@@ -1450,64 +1450,101 @@ def _shorten_url(u: str, max_len: int = 70) -> str:
     u = u.strip()
     return u if len(u) <= max_len else u[:max_len-3] + "..."
 
+from datetime import datetime
+
 def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     buf = io.BytesIO()
     lm = rm = 18 * mm
     tm = bm = 18 * mm
-    doc = BaseDocTemplate(buf, leftMargin=lm, rightMargin=rm,
-                          topMargin=tm, bottomMargin=bm, pagesize=A4)
+    doc = BaseDocTemplate(
+        buf,
+        leftMargin=lm,
+        rightMargin=rm,
+        topMargin=tm,
+        bottomMargin=bm,
+        pagesize=A4,
+    )
     frame = Frame(lm, bm, A4[0] - lm - rm, A4[1] - tm - bm, id="popup")
     doc.addPageTemplates(PageTemplate(id="popup", frames=[frame]))
 
     styles = getSampleStyleSheet()
-    h   = ParagraphStyle("popup_h", parent=styles["Heading2"],
-                         fontName="Helvetica-Bold", fontSize=16,
-                         textColor=colors.HexColor("#0e1629"), spaceAfter=2)
-    sub = ParagraphStyle("popup_sub", parent=styles["Normal"],
-                         fontName="Helvetica", fontSize=10,
-                         textColor=colors.HexColor("#64748b"), spaceAfter=4)
-    cell = ParagraphStyle("popup_cell", parent=styles["Normal"],
-                          fontName="Helvetica", fontSize=9, leading=11,
-                          textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
-    url_cell = ParagraphStyle("popup_url", parent=cell,
-                              fontSize=8, leading=9,
-                              wordWrap="CJK", splitLongWords=1)
-    hdr = ParagraphStyle("popup_hdr", parent=styles["Normal"],
-                         fontName="Helvetica-Bold", fontSize=9,
-                         textColor=colors.white)
+    h = ParagraphStyle(
+        "popup_h",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=16,
+        textColor=colors.HexColor("#0e1629"),
+        spaceAfter=4,
+    )
+    sub = ParagraphStyle(
+        "popup_sub",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=11,
+        textColor=colors.HexColor("#3b3b3b"),
+        spaceAfter=4,
+    )
+    cell = ParagraphStyle(
+        "popup_cell",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=9,
+        leading=11,
+        textColor=colors.HexColor("#0e1629"),
+        wordWrap="CJK",
+    )
+    hdr = ParagraphStyle(
+        "popup_hdr",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        textColor=colors.white,
+    )
 
     elems = [Paragraph(title, h)]
+    
+    # Add the current date (report download date) under the title
+    download_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    elems.append(Paragraph(f"Report Downloaded on: {download_date}", sub))
+
     if subtitle:
         elems.append(Paragraph(subtitle, sub))
     elems.append(Spacer(1, 3 * mm))
 
-    # table header
-    data = [[
-        Paragraph("Type", hdr),
-        Paragraph("Title", hdr),
-        Paragraph("Meta", hdr),
-        Paragraph("URL", hdr),
-    ]]
+    data = [
+        [
+            Paragraph("Type", hdr),
+            Paragraph("Title", hdr),
+            Paragraph("Meta", hdr),
+        ]
+    ]
 
-    link_styles = []  # will hold LINK style commands
-
-    # build rows + link annotations
-    for row_idx, r in enumerate(rows, start=1):  # start=1 because 0 is header
+    for r in rows:
         url = (r.get("url") or "").strip()
-        display_url = _shorten_url(url)          # nice short text in cell
+        t = (r.get("type") or "").lower()
 
-        data.append([
-            Paragraph(html.escape(str(r.get("type", ""))), cell),
-            Paragraph(html.escape(str(r.get("title", ""))), cell),
-            Paragraph(html.escape(str(r.get("meta", ""))), cell),
-            Paragraph(html.escape(display_url), url_cell),
-        ])
+        if "video" in t:
+            type_para = Paragraph('<font color="#dc2626"><b>YT</b></font>', cell)
+        elif "article" in t or "web" in t:
+            type_para = Paragraph('<font color="#2563eb"><b>WEB</b></font>', cell)
+        else:
+            type_para = Paragraph(html.escape(str(r.get("type", ""))), cell)
 
+        title_text = html.escape(str(r.get("title", "") or ""))
         if url:
-            # make the entire URL cell a real hyperlink, regardless of wrapping
-            link_styles.append(("LINK", (3, row_idx), (3, row_idx), url))
+            safe_url = html.escape(url, quote=True)
+            title_para = Paragraph(
+                f'<link href="{safe_url}" color="blue">{title_text}</link>',
+                cell,
+            )
+        else:
+            title_para = Paragraph(title_text, cell)
 
-    col_widths = [12 * mm, 40 * mm, 42 * mm, 80 * mm]
+        meta_para = Paragraph(html.escape(str(r.get("meta", "") or "")), cell)
+
+        data.append([type_para, title_para, meta_para])
+
+    col_widths = [12 * mm, 80 * mm, 80 * mm]
 
     base_styles = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0e1629")),
@@ -1526,12 +1563,15 @@ def _build_popup_pdf(title: str, subtitle: str, rows: list[dict]) -> bytes:
     ]
 
     tbl = Table(data, colWidths=col_widths, repeatRows=1)
-    tbl.setStyle(TableStyle(base_styles + link_styles))
+    tbl.setStyle(TableStyle(base_styles))
 
     elems.append(tbl)
     doc.build(elems)
     buf.seek(0)
     return buf.getvalue()
+
+
+
 
 
 # ---------- Line-chart (date) -> popup content ----------
@@ -1595,7 +1635,7 @@ for key, raw in line_detail_raw_map.items():
     rows = _rows_from_raw(raw)
     if not rows:
         continue
-    pdf_bytes = _build_popup_pdf(f"Pakistan – {key}", "Videos and articles mentioning Pakistan on this day", rows)
+    pdf_bytes = _build_popup_pdf(f"Pakistan – {key}", "Videos and Articles mentioning Pakistan on this day", rows)
     line_detail_pdf_b64_map[key] = base64.b64encode(pdf_bytes).decode("ascii")
 
 line_detail_map_json = json.dumps(line_detail_map)
@@ -1646,7 +1686,7 @@ for key, raw in radar_detail_raw_map.items():
     rows = _rows_from_raw(raw)
     if not rows:
         continue
-    pdf_bytes = _build_popup_pdf(f"Pakistan Topic – {key}", "Videos and articles for this topic mentioning Pakistan", rows)
+    pdf_bytes = _build_popup_pdf(f"Pakistan Topic – {key}", "Videos and Articles for this topic mentioning Pakistan", rows)
     radar_detail_pdf_b64_map[key] = base64.b64encode(pdf_bytes).decode("ascii")
 
 radar_detail_map_json = json.dumps(radar_detail_map)
