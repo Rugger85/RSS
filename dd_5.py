@@ -710,7 +710,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     elems.append(PageBreak())
 
     _PLACEHOLDER_PNG_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
     )
 
     def _placeholder_img2(max_w, max_h):
@@ -719,7 +719,6 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         img = Image(bio)
         img._restrictSize(max_w, max_h)
         return img
-
 
     def _img_from_any(src, max_w, max_h):
         try:
@@ -768,13 +767,12 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         fav = _favicon_from_any_url(channel_url, 64)
         return _img_from_any(fav, max_w, max_h)
 
-    # Videos table
     elems.append(Paragraph("Relevant Videos", table_title))
     elems.append(Spacer(1, 2 * mm))
 
     Ls = landscape(A4)
     avail_w = Ls[0] - lm - rm
-    ratios = [0.09, 0.07, 0.24, 0.16, 0.07, 0.06, 0.07, 0.12, 0.12]
+    ratios = [0.09, 0.07, 0.32, 0.16, 0.08, 0.07, 0.09, 0.12]
     col_widths = [r * avail_w for r in ratios]
 
     rows = [[
@@ -786,7 +784,6 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         Paragraph("Likes", header_style),
         Paragraph("Comments", header_style),
         Paragraph("Published", header_style),
-        Paragraph("URL", header_style)
     ]]
 
     vids = videos_df.copy()
@@ -800,16 +797,22 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         logo_src_url = r.get("channel_url")
         thumb = _img_from_any(thumb_src, thumb_box_w, thumb_box_h)
         logo = _logo_from_channel(logo_src_thumb, logo_src_url, logo_box_w, logo_box_h)
+        url = str(r.get("url", "") or "")
+        title_text = html.escape(str(r.get("title", "") or ""))
+        if url:
+            safe_url = html.escape(url, quote=True)
+            title_para = Paragraph(f'<link href="{safe_url}" color="blue">{title_text}</link>', cell)
+        else:
+            title_para = Paragraph(title_text, cell)
         rows.append([
             thumb,
             logo,
-            Paragraph(html.escape(str(r.get("title", "") or "")), cell),
+            title_para,
             Paragraph(html.escape(str(r.get("channel_title", "") or "")), cell),
             _comma(r.get("view_count")),
             _comma(r.get("like_count")),
             _comma(r.get("comment_count")),
             (r["published_at"].strftime("%Y-%m-%d %H:%M") if pd.notna(r["published_at"]) else ""),
-            Paragraph(html.escape(str(r.get("url", "") or "")), cell)
         ])
 
     tbl = Table(rows, colWidths=col_widths, repeatRows=1)
@@ -830,7 +833,6 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     ]))
     elems.append(tbl)
 
-    # Articles table
     elems.append(Spacer(1, 6 * mm))
     elems.append(Paragraph("Relevant Articles", table_title))
     elems.append(Spacer(1, 2 * mm))
@@ -839,7 +841,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     ar["published"] = pd.to_datetime(ar.get("published"), errors="coerce")
 
     a_avail_w = Ls[0] - lm - rm
-    a_ratios = [0.06, 0.12, 0.48, 0.14, 0.20]
+    a_ratios = [0.08, 0.14, 0.54, 0.24]
     a_col_w = [r * a_avail_w for r in a_ratios]
     a_cell = ParagraphStyle("a_cell", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=12, textColor=colors.HexColor("#0e1629"), wordWrap="CJK")
 
@@ -848,7 +850,6 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         Paragraph("Source", header_style),
         Paragraph("Title", header_style),
         Paragraph("Published", header_style),
-        Paragraph("URL", header_style),
     ]]
 
     a_icon_w, a_icon_h = a_col_w[0], 18
@@ -859,12 +860,17 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         pub = r.get("published")
         pub_s = pub.strftime("%Y-%m-%d %H:%M") if isinstance(pub, pd.Timestamp) and not pd.isna(pub) else (str(pub) if pub else "")
         icon = _favicon_for_url(link, a_icon_w, a_icon_h)
+        ttl_text = html.escape(str(ttl))
+        if link:
+            safe_link = html.escape(link, quote=True)
+            ttl_para = Paragraph(f'<link href="{safe_link}" color="blue">{ttl_text}</link>', a_cell)
+        else:
+            ttl_para = Paragraph(ttl_text, a_cell)
         a_rows.append([
             icon,
             Paragraph(html.escape(str(src)), a_cell),
-            Paragraph(html.escape(str(ttl)), a_cell),
+            ttl_para,
             Paragraph(html.escape(pub_s), a_cell),
-            Paragraph(html.escape(str(link)), a_cell),
         ])
 
     a_tbl = Table(a_rows, colWidths=a_col_w, repeatRows=1)
@@ -884,14 +890,12 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     ]))
     elems.append(a_tbl)
 
-    # Channel details table (robust to missing columns)
     elems.append(Spacer(1, 8 * mm))
     elems.append(Paragraph("Channel Details (Videos in this Report)", table_title))
     elems.append(Spacer(1, 2 * mm))
 
     ch_df = vids.copy()
     if ch_df.empty:
-        # nothing to group; skip channel table
         doc.build(elems)
         buf.seek(0)
         return buf.getvalue()
@@ -920,7 +924,6 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     else:
         agg_dict["created_from_videos"] = ("published_at", lambda s: pd.to_datetime(s, errors="coerce").dropna().min())
 
-    # 🔧 NEW: drop aggregations for columns that don't exist in ch_df
     available_cols = set(ch_df.columns)
     cleaned_agg = {}
     for out_name, spec in agg_dict.items():
@@ -933,7 +936,6 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     agg_dict = cleaned_agg
 
     if not agg_dict:
-        # no valid aggregations; skip channel table
         doc.build(elems)
         buf.seek(0)
         return buf.getvalue()
@@ -949,7 +951,7 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
     ch_agg["created_on"] = pd.to_datetime(ch_agg["created_on"], errors="coerce")
 
     c_avail_w = Ls[0] - lm - rm
-    c_ratios  = [0.08, 0.22, 0.12, 0.14, 0.14, 0.12, 0.09, 0.09]
+    c_ratios  = [0.08, 0.26, 0.14, 0.16, 0.14, 0.11, 0.11]
     c_widths  = [r * c_avail_w for r in c_ratios]
     c_rows = [[
         Paragraph("Logo", header_style),
@@ -959,7 +961,6 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         Paragraph("Channel Views", header_style),
         Paragraph("Videos in Report", header_style),
         Paragraph("Created On", header_style),
-        Paragraph("URL", header_style),
     ]]
 
     c_logo_w, c_logo_h = c_widths[0], 22
@@ -974,16 +975,21 @@ def _pdf_build(topic, header_row, stats_dict, videos_df, articles_df):
         created_on = r.get("created_on")
         created_str = created_on.strftime("%Y-%m-%d") if isinstance(created_on, pd.Timestamp) and not pd.isna(created_on) else ""
         url = r.get("channel_url","") or ""
+        title_text = html.escape(str(title))
+        if url:
+            safe_url = html.escape(url, quote=True)
+            title_para = Paragraph(f'<link href="{safe_url}" color="blue">{title_text}</link>', cell)
+        else:
+            title_para = Paragraph(title_text, cell)
 
         c_rows.append([
             logo,
-            Paragraph(html.escape(str(title)), cell),
+            title_para,
             Paragraph(html.escape(str(country)), cell),
             Paragraph(subs, cell),
             Paragraph(ch_views, cell),
             Paragraph(str(vids_in), cell),
             Paragraph(html.escape(created_str), cell),
-            Paragraph(html.escape(url), cell),
         ])
 
     c_tbl = Table(c_rows, colWidths=c_widths, repeatRows=1)
@@ -2816,7 +2822,6 @@ with st.sidebar:
 
 # Draw main (only if not redirected by router)
 render_main()
-
 
 
 
